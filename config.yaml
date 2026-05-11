@@ -1,0 +1,40 @@
+receivers:
+  modbus:
+    endpoint: "localhost:502"
+    unit_id: 1
+    polling_interval: 10s
+    timeout: 5s
+    registers:
+      - address: 0
+        type: holding_register
+        data_type: float32
+        byte_order: ABCD
+        name: "temperature"
+      - address: 2
+        type: holding_register
+        data_type: uint16
+        byte_order: ABCD
+        name: "pressure"
+      - address: 100
+        type: coil
+        data_type: bool
+        name: "pump_status"
+
+processors:
+  batch:
+
+exporters:
+  debug:
+    verbosity: detailed
+
+extensions:
+  zpages:
+    endpoint: "localhost:55679"
+
+service:
+  extensions: [zpages]
+  pipelines:
+    metrics:
+      receivers: [modbus]
+      processors: [batch]
+      exporters: [debug]
