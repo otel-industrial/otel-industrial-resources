@@ -46,41 +46,30 @@ func (d DataType) registerWidth() uint16 {
 }
 
 // ByteOrder describes the byte/word arrangement of multi-register values.
-//
-//	Given four bytes A B C D (A = most-significant):
-//	ABCD – big-endian, most significant byte first          (e.g. many PLCs)
-//	DCBA – little-endian, least significant byte first      (e.g. x86-style)
-//	BADC – big-endian words, bytes swapped within each word (e.g. some Schneider devices)
-//	CDAB – little-endian words, bytes swapped within each word (e.g. some ABB devices)
 type ByteOrder string
 
 const (
-	ByteOrderABCD ByteOrder = "ABCD" // big-endian
-	ByteOrderDCBA ByteOrder = "DCBA" // little-endian
-	ByteOrderBADC ByteOrder = "BADC" // mid-big / byte-swapped
-	ByteOrderCDAB ByteOrder = "CDAB" // mid-little / word-swapped
+	ByteOrderABCD ByteOrder = "ABCD"
+	ByteOrderDCBA ByteOrder = "DCBA"
+	ByteOrderBADC ByteOrder = "BADC"
+	ByteOrderCDAB ByteOrder = "CDAB"
 )
 
 // reorder rearranges raw Modbus bytes according to the byte order.
-// raw must be exactly 2*n bytes (one byte pair per register).
-// The returned slice is always the same length as raw.
 func (bo ByteOrder) reorder(raw []byte) []byte {
 	out := make([]byte, len(raw))
 	switch bo {
 	case ByteOrderABCD:
 		copy(out, raw)
-
 	case ByteOrderDCBA:
 		for i, b := range raw {
 			out[len(raw)-1-i] = b
 		}
-
 	case ByteOrderBADC:
 		for i := 0; i+1 < len(raw); i += 2 {
 			out[i] = raw[i+1]
 			out[i+1] = raw[i]
 		}
-
 	case ByteOrderCDAB:
 		for i := 0; i+1 < len(raw); i += 2 {
 			j := len(raw) - 2 - i
@@ -93,25 +82,11 @@ func (bo ByteOrder) reorder(raw []byte) []byte {
 
 // RegisterDefinition describes a single logical value to read from a Modbus device.
 type RegisterDefinition struct {
-	// Address is the zero-based Modbus register (or coil) address.
-	Address uint16 `mapstructure:"address"`
-
-	// Type selects the Modbus register bank (coil, discrete_input,
-	// holding_register, input_register).
-	Type RegisterType `mapstructure:"type"`
-
-	// DataType controls how the raw bytes are decoded.
-	// For coil / discrete_input registers only "bool" is valid.
-	// Default: "uint16" for register banks, "bool" for bit banks.
-	DataType DataType `mapstructure:"data_type"`
-
-	// ByteOrder controls multi-register byte arrangement.
-	// Ignored for single-register (16-bit) and bit types.
-	// Default: ABCD (big-endian).
-	ByteOrder ByteOrder `mapstructure:"byte_order"`
-
-	// Name is an optional human-readable label emitted as a metric attribute.
-	Name string `mapstructure:"name"`
+	Address   uint16       `mapstructure:"address"`
+	Type      RegisterType `mapstructure:"type"`
+	DataType  DataType     `mapstructure:"data_type"`
+	ByteOrder ByteOrder    `mapstructure:"byte_order"`
+	Name      string       `mapstructure:"name"`
 }
 
 // registerCount returns how many consecutive Modbus registers to request.
@@ -121,29 +96,24 @@ func (r *RegisterDefinition) registerCount() uint16 {
 
 // Config holds all configuration for the Modbus receiver.
 type Config struct {
-	// Endpoint is the Modbus TCP host:port (e.g. "192.168.1.10:502").
-	Endpoint string `mapstructure:"endpoint"`
-
-	// UnitID is the Modbus slave/unit identifier (1–247).
-	UnitID byte `mapstructure:"unit_id"`
-
-	// PollingInterval controls how often registers are read.
-	PollingInterval time.Duration `mapstructure:"polling_interval"`
-
-	// Timeout is the per-request TCP timeout.
-	Timeout time.Duration `mapstructure:"timeout"`
-
-	// Registers is the list of registers/coils to poll.
-	Registers []RegisterDefinition `mapstructure:"registers"`
+	Endpoint        string               `mapstructure:"endpoint"`
+	UnitID          int                  `mapstructure:"unit_id"`
+	PollingInterval time.Duration        `mapstructure:"polling_interval"`
+	Timeout         time.Duration        `mapstructure:"timeout"`
+	Registers       []RegisterDefinition `mapstructure:"registers"`
 }
 
 // Validate checks the configuration for required fields and valid values.
+// This is called automatically by the OTel collector after config unmarshalling.
 func (c *Config) Validate() error {
+	fmt.Printf("[modbus] Validate() called: endpoint=%s unit_id=%d registers=%d\n",
+		c.Endpoint, c.UnitID, len(c.Registers))
+
 	if c.Endpoint == "" {
 		return errors.New("endpoint must be set (e.g. \"192.168.1.10:502\")")
 	}
-	if c.UnitID == 0 {
-		return errors.New("unit_id must be between 1 and 247")
+	if c.UnitID <= 0 || c.UnitID > 247 {
+		return fmt.Errorf("unit_id must be between 1 and 247, got %d", c.UnitID)
 	}
 	if c.PollingInterval <= 0 {
 		return errors.New("polling_interval must be a positive duration")
@@ -154,8 +124,8 @@ func (c *Config) Validate() error {
 	if len(c.Registers) == 0 {
 		return errors.New("at least one register definition must be provided")
 	}
-	for i, r := range c.Registers {
-		if err := r.validate(); err != nil {
+	for i := range c.Registers {
+		if err := c.Registers[i].validate(); err != nil {
 			return fmt.Errorf("registers[%d]: %w", i, err)
 		}
 	}

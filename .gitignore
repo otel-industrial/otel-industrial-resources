@@ -33,4 +33,4 @@ dist/
 Thumbs.db
 
 # OpenTelemetry Collector Builder output
-otelcol-modbus
+otelcol-modbussimulator

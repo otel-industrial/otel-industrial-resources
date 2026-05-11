@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	github.com/goburrow/modbus v0.1.0
+	github.com/tbrandon/mbserver v0.0.0-20231208015628-36eb59221ac2
 	go.opentelemetry.io/collector/component v0.96.0
 	go.opentelemetry.io/collector/consumer v0.96.0
 	go.opentelemetry.io/collector/pdata v1.3.0

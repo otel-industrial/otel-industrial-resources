@@ -2,7 +2,6 @@ package modbusreceiver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -17,6 +16,7 @@ type modbusReceiver struct {
 	scraper  *modbusScraper
 	cancel   context.CancelFunc
 	done     chan struct{}
+	started  bool
 }
 
 func newModbusReceiver(cfg *Config, consumer consumer.Metrics, logger *zap.Logger) *modbusReceiver {
@@ -29,14 +29,10 @@ func newModbusReceiver(cfg *Config, consumer consumer.Metrics, logger *zap.Logge
 	}
 }
 
-// Start validates config, connects to the Modbus device, and begins polling.
+// Start begins the polling loop. Connection to the Modbus device is
+// established lazily on the first scrape so Start() always returns quickly.
 func (r *modbusReceiver) Start(ctx context.Context, _ component.Host) error {
-	if err := r.cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid modbus receiver config: %w", err)
-	}
-	if err := r.scraper.start(ctx); err != nil {
-		return err
-	}
+	r.started = true
 	ctx, r.cancel = context.WithCancel(context.Background())
 	go r.pollLoop(ctx)
 	return nil
@@ -44,6 +40,9 @@ func (r *modbusReceiver) Start(ctx context.Context, _ component.Host) error {
 
 // Shutdown cancels the polling loop and disconnects from the device.
 func (r *modbusReceiver) Shutdown(ctx context.Context) error {
+	if !r.started {
+		return nil
+	}
 	if r.cancel != nil {
 		r.cancel()
 	}
@@ -61,7 +60,6 @@ func (r *modbusReceiver) pollLoop(ctx context.Context) {
 	ticker := time.NewTicker(r.cfg.PollingInterval)
 	defer ticker.Stop()
 
-	// Do an initial scrape immediately on startup.
 	r.scrapeAndConsume(ctx)
 
 	for {
@@ -88,7 +86,6 @@ func (r *modbusReceiver) scrapeAndConsume(ctx context.Context) {
 	}
 }
 
-// Compile-time check that modbusReceiver satisfies the receiver.Metrics interface.
 var _ interface {
 	Start(context.Context, component.Host) error
 	Shutdown(context.Context) error

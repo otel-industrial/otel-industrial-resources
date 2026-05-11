@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/goburrow/modbus"
@@ -16,7 +17,8 @@ import (
 type modbusScraper struct {
 	cfg     *Config
 	logger  *zap.Logger
-	handler modbus.ClientHandler
+	mu      sync.Mutex
+	handler *modbus.TCPClientHandler
 	client  modbus.Client
 }
 
@@ -24,11 +26,17 @@ func newModbusScraper(cfg *Config, logger *zap.Logger) *modbusScraper {
 	return &modbusScraper{cfg: cfg, logger: logger}
 }
 
-// start opens the TCP connection to the Modbus device.
+// start is a no-op — connection is established lazily on first scrape.
 func (s *modbusScraper) start(_ context.Context) error {
+	return nil
+}
+
+// connect establishes the TCP connection to the Modbus device.
+// Called lazily on first scrape and on reconnect after failure.
+func (s *modbusScraper) connect() error {
 	handler := modbus.NewTCPClientHandler(s.cfg.Endpoint)
 	handler.Timeout = s.cfg.Timeout
-	handler.SlaveId = s.cfg.UnitID
+	handler.SlaveId = byte(s.cfg.UnitID)
 
 	if err := handler.Connect(); err != nil {
 		return fmt.Errorf("failed to connect to Modbus endpoint %s: %w", s.cfg.Endpoint, err)
@@ -38,21 +46,33 @@ func (s *modbusScraper) start(_ context.Context) error {
 	s.client = modbus.NewClient(handler)
 	s.logger.Info("Connected to Modbus device",
 		zap.String("endpoint", s.cfg.Endpoint),
-		zap.Uint8("unit_id", s.cfg.UnitID),
+		zap.Int("unit_id", s.cfg.UnitID),
 	)
 	return nil
 }
 
 // shutdown closes the TCP connection.
 func (s *modbusScraper) shutdown(_ context.Context) error {
-	if h, ok := s.handler.(*modbus.TCPClientHandler); ok {
-		return h.Close()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.handler != nil {
+		return s.handler.Close()
 	}
 	return nil
 }
 
 // scrape polls all configured registers and returns a pmetric.Metrics.
 func (s *modbusScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Lazy connect on first scrape or after disconnect.
+	if s.client == nil {
+		if err := s.connect(); err != nil {
+			return pmetric.NewMetrics(), err
+		}
+	}
+
 	md := pmetric.NewMetrics()
 	rm := md.ResourceMetrics().AppendEmpty()
 	sm := rm.ScopeMetrics().AppendEmpty()
@@ -68,6 +88,12 @@ func (s *modbusScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 				zap.String("data_type", string(reg.DataType)),
 				zap.Error(err),
 			)
+			// On error, reset client so next scrape reconnects.
+			s.client = nil
+			if s.handler != nil {
+				_ = s.handler.Close()
+				s.handler = nil
+			}
 		}
 	}
 
@@ -112,18 +138,13 @@ func (s *modbusScraper) scrapeRegister(sm pmetric.ScopeMetrics, now pcommon.Time
 		if err != nil {
 			return fmt.Errorf("ReadRegisters(%d, count=%d): %w", reg.Address, count, err)
 		}
-
-		// Apply byte order reordering before decoding.
 		raw = reg.ByteOrder.reorder(raw)
-
 		return s.decodeAndAppend(sm, now, reg, raw)
 	}
 
 	return nil
 }
 
-// decodeAndAppend decodes raw (already reordered) bytes into the correct Go type
-// and appends it as a metric data point.
 func (s *modbusScraper) decodeAndAppend(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition, raw []byte) error {
 	const metricName = "modbus.register.value"
 	const metricDesc = "The decoded value read from a Modbus register."
@@ -194,13 +215,7 @@ func (s *modbusScraper) decodeAndAppend(sm pmetric.ScopeMetrics, now pcommon.Tim
 	return nil
 }
 
-func (s *modbusScraper) appendIntMetric(
-	sm pmetric.ScopeMetrics,
-	now pcommon.Timestamp,
-	reg RegisterDefinition,
-	name, desc string,
-	val int64,
-) {
+func (s *modbusScraper) appendIntMetric(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition, name, desc string, val int64) {
 	m := sm.Metrics().AppendEmpty()
 	m.SetName(name)
 	m.SetDescription(desc)
@@ -211,13 +226,7 @@ func (s *modbusScraper) appendIntMetric(
 	setAttributes(dp.Attributes(), reg, s.cfg.UnitID)
 }
 
-func (s *modbusScraper) appendDoubleMetric(
-	sm pmetric.ScopeMetrics,
-	now pcommon.Timestamp,
-	reg RegisterDefinition,
-	name, desc string,
-	val float64,
-) {
+func (s *modbusScraper) appendDoubleMetric(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition, name, desc string, val float64) {
 	m := sm.Metrics().AppendEmpty()
 	m.SetName(name)
 	m.SetDescription(desc)
@@ -228,7 +237,7 @@ func (s *modbusScraper) appendDoubleMetric(
 	setAttributes(dp.Attributes(), reg, s.cfg.UnitID)
 }
 
-func setAttributes(attrs pcommon.Map, reg RegisterDefinition, unitID byte) {
+func setAttributes(attrs pcommon.Map, reg RegisterDefinition, unitID int) {
 	attrs.PutInt("modbus.register_address", int64(reg.Address))
 	attrs.PutInt("modbus.unit_id", int64(unitID))
 	attrs.PutStr("modbus.register_type", string(reg.Type))
