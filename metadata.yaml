@@ -12,20 +12,14 @@ status:
 resource_attributes: {}
 
 attributes:
-  modbus.register_address:
-    description: The Modbus register address that was read.
-    type: int
-  modbus.unit_id:
-    description: The Modbus unit/slave ID.
-    type: int
-  modbus.register_type:
-    description: The type of Modbus register bank (coil, discrete_input, holding_register, input_register).
+  modbus.byte_order:
+    description: The byte order used to decode multi-register values.
     type: string
     enum:
-      - coil
-      - discrete_input
-      - holding_register
-      - input_register
+      - ABCD
+      - DCBA
+      - BADC
+      - CDAB
   modbus.data_type:
     description: The data type used to decode the register value.
     type: string
@@ -39,41 +33,49 @@ attributes:
       - uint64
       - float32
       - float64
-  modbus.byte_order:
-    description: The byte order used to decode multi-register values.
-    type: string
-    enum:
-      - ABCD
-      - DCBA
-      - BADC
-      - CDAB
   modbus.name:
     description: Optional human-readable name for the register as set in config.
     type: string
+  modbus.register_address:
+    description: The Modbus register address that was read.
+    type: int
+  modbus.register_type:
+    description: The type of Modbus register bank.
+    type: string
+    enum:
+      - coil
+      - discrete_input
+      - holding_register
+      - input_register
+  modbus.unit_id:
+    description: The Modbus unit/slave ID.
+    type: int
 
 metrics:
-  modbus.register.value:
-    enabled: true
-    description: The decoded value read from a Modbus holding or input register.
-    unit: "1"
-    gauge:
-      value_type: double
-    attributes:
-      - modbus.register_address
-      - modbus.unit_id
-      - modbus.register_type
-      - modbus.data_type
-      - modbus.byte_order
-      - modbus.name
-
   modbus.coil.value:
     enabled: true
     description: The value read from a Modbus coil or discrete input (0 or 1).
     unit: "1"
+    stability: development
     gauge:
       value_type: int
     attributes:
-      - modbus.register_address
-      - modbus.unit_id
-      - modbus.register_type
       - modbus.name
+      - modbus.register_address
+      - modbus.register_type
+      - modbus.unit_id
+
+  modbus.register.value:
+    enabled: true
+    description: The decoded value read from a Modbus holding or input register.
+    unit: "1"
+    stability: development
+    gauge:
+      value_type: double
+    attributes:
+      - modbus.byte_order
+      - modbus.data_type
+      - modbus.name
+      - modbus.register_address
+      - modbus.register_type
+      - modbus.unit_id

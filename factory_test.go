@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 )
@@ -37,9 +38,9 @@ func TestCreateMetricsReceiver(t *testing.T) {
 		{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
 	}
 
-	recv, err := factory.CreateMetricsReceiver(
+	recv, err := factory.CreateMetrics(
 		context.Background(),
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(component.MustNewType("modbus")),
 		cfg,
 		consumertest.NewNop(),
 	)

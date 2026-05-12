@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-development-orange.svg)](https://github.com/lukaszciukaj/modbusreceiver)
 
-An OpenTelemetry Collector receiver that polls a **Modbus TCP** device and converts register and coil values into OpenTelemetry metrics. Designed for industrial IoT, SCADA systems, and PLCs.
+Modbus has been the standard protocol for industrial devices — PLCs, sensors, SCADA systems — since 1979, yet operational data from the factory floor rarely makes it into modern observability pipelines. The **modbusreceiver** changes that by extending the OpenTelemetry Collector into industrial environments, turning raw register and coil values into standard OTel metrics with no proprietary gateway or vendor lock-in required.
 
 ## Features
 
@@ -17,32 +17,29 @@ An OpenTelemetry Collector receiver that polls a **Modbus TCP** device and conve
 - **Lazy connection** — connects to the device on first scrape, reconnects automatically on failure
 - **Rich metric attributes** — register address, unit ID, register type, data type, byte order, and optional name
 - **Built-in simulator** — test without real hardware using the included Modbus TCP simulator
+- **otelcol-contrib aligned** — structured to match official OpenTelemetry Collector contrib conventions, ready for upstream proposal
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    PLC1["PLC / Device 1"]
-    PLC2["PLC / Device 2"]
-    PLC3["PLC / Device 3"]
+    subgraph Devices["Field Devices"]
+        direction LR
+        PLC1["PLC / Device"]
+    end
 
     subgraph Collector["OpenTelemetry Collector"]
         direction TB
-        RCV["modbusreceiver
-(Scraper + Decoder)"]
-        PROC["Processor
-batch"]
-        EXP["Exporter
-OTLP"]
+        RCV["modbusreceiver <BR> (Scraper + Decoder)"]
+        PROC["Processors"]
+        EXP["Exporters"]
         RCV --> PROC --> EXP
     end
 
-    BACKEND["Observability Backend"]
+    BACKEND["Observability / Data Analytics Backend"]
 
-    PLC1 -->|"Modbus TCP"| RCV
-    PLC2 -->|"Modbus TCP"| RCV
-    PLC3 -->|"Modbus TCP"| RCV
-    EXP  -->|"OTLP"| BACKEND
+    Devices -->|"Modbus TCP"| RCV
+    EXP     -->|"OTLP"| BACKEND
 ```
 
 ## Quick start
@@ -50,13 +47,13 @@ OTLP"]
 ### Prerequisites
 
 - Go 1.25+
-- [OpenTelemetry Collector Builder](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder) v0.96.0
+- [OpenTelemetry Collector Builder (ocb)](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder) v0.152.0
 
 ```bash
-go install go.opentelemetry.io/collector/cmd/builder@v0.96.0
+go install go.opentelemetry.io/collector/cmd/builder@v0.152.0
 ```
 
-> **Why v0.96.0?** The `ocb` version, the `otelcol_version` in `builder-config.yaml`, and the OTel collector dependencies in `go.mod` must all match. This project is currently pinned to `v0.96.0`. Upgrading is tracked in the roadmap.
+> **Version alignment:** `ocb`, `otelcol_version` in `builder-config.yaml`, and OTel collector dependencies in `go.mod` must all match. This project uses `ocb v0.152.0` with collector components at `v1.58.0` / `v0.152.0`.
 
 ### 1. Clone and build
 
@@ -172,6 +169,48 @@ Both metrics share these attributes:
 | `modbus.byte_order`       | Byte order used for decoding       |
 | `modbus.name`             | Optional name from config          |
 
+Full metric documentation is auto-generated in [documentation.md](documentation.md) by `mdatagen` from [metadata.yaml](metadata.yaml).
+
+## Project structure
+
+This receiver follows the [otelcol-contrib conventions](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md) and is structured to be ready for an upstream proposal:
+
+```
+modbusreceiver/
+├── config.go                   # Config struct and validation
+├── doc.go                      # go:generate mdatagen directive
+├── factory.go                  # OTel ComponentFactory registration
+├── receiver.go                 # Lifecycle management and poll loop
+├── scraper.go                  # Modbus TCP client, decode, metric emission
+├── metadata.yaml               # Metric definitions (source of truth)
+├── documentation.md            # Auto-generated metric docs (from mdatagen)
+├── generated_component_test.go # Auto-generated component tests
+├── generated_package_test.go   # Auto-generated package tests
+├── internal/
+│   └── metadata/               # Auto-generated from metadata.yaml
+│       ├── generated_config.go
+│       ├── generated_metrics.go
+│       └── generated_status.go
+├── testdata/
+│   └── config.yaml             # Test configuration
+├── cmd/
+│   └── simulator/              # Modbus TCP simulator for local testing
+│       └── main.go
+└── builder-config.yaml         # OCB manifest for building the collector
+```
+
+To regenerate `internal/metadata/` after editing `metadata.yaml`:
+
+```bash
+# Install mdatagen (requires cloning the collector repo)
+git clone --depth=1 --branch v0.152.0 https://github.com/open-telemetry/opentelemetry-collector.git
+cd opentelemetry-collector/cmd/mdatagen && go build -o ~/go/bin/mdatagen .
+
+# Regenerate
+cd ~/your/modbusreceiver
+go generate ./...
+```
+
 ## Using as a library
 
 Add this receiver to your own custom collector distribution via `builder-config.yaml`:
@@ -189,6 +228,22 @@ make lint    # run linter (requires golangci-lint)
 make tidy    # tidy go modules
 make clean   # remove build artifacts
 ```
+
+## Cardinality considerations
+ 
+Each combination of metric attributes creates a unique time series in your metrics backend. For this receiver, cardinality is determined by:
+ 
+```
+time series = number of registers × unique (unit_id, register_type, data_type, byte_order, name)
+```
+ 
+Since all attributes are derived from your static `config.yaml`, cardinality is **fully predictable and bounded** — a 50-register config produces exactly 50 time series, regardless of polling frequency.
+ 
+**Things to avoid:**
+ 
+- Do not use dynamic or high-cardinality values in the `name` field (e.g. timestamps, UUIDs). The `name` field is meant for a short human-readable label like `"temperature"` or `"pump_status"`.
+- If polling multiple Modbus devices at the same endpoint with different `unit_id` values using separate receiver instances, ensure each instance has a distinct configuration so time series remain distinguishable.
+**Tip:** Use the `modbus.name` attribute in your dashboard queries to select specific registers rather than filtering on `modbus.register_address` — it makes dashboards more readable and is guaranteed to be low-cardinality.
 
 ## Troubleshooting
 
@@ -209,11 +264,7 @@ Check your `config.yaml` is valid YAML and all required fields (`endpoint`, `uni
 - [ ] Scale factor and unit conversion per register (e.g. raw → °C)
 - [ ] Register grouping — batch reads for consecutive addresses
 - [ ] Integration tests with a Modbus TCP simulator
-- [ ] `mdatagen`-generated metric definitions from `metadata.yaml`
-- [ ] Prometheus exporter example in `config.example.yaml`
-- [ ] Helm chart for Kubernetes deployment
 - [ ] Support for multiple devices (multiple `unit_id` targets per endpoint)
-- [ ] Upgrade OTel collector dependencies and `ocb` to latest stable version
 
 ## Contributing
 

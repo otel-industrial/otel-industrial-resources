@@ -2,7 +2,7 @@
 # Builds a custom OpenTelemetry Collector binary with the Modbus receiver.
 #
 # Prerequisites:
-#   go install go.opentelemetry.io/collector/cmd/builder@v0.96.0
+#   go install go.opentelemetry.io/collector/cmd/builder@v0.152.0
 #
 # Build:
 #   builder --config builder-config.yaml
@@ -20,22 +20,22 @@ dist:
   name: otelcol-modbus
   description: OpenTelemetry Collector with Modbus TCP receiver
   output_path: ./bin
-  otelcol_version: 0.96.0
+  otelcol_version: 0.152.0
 
 receivers:
   - gomod: github.com/lukaszciukaj/modbusreceiver v0.0.1
     path: ./   # local dev only — remove after tagging a release
 
 exporters:
-  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.96.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.152.0
 
 processors:
-  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.96.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.152.0
 
 extensions:
-  - gomod: go.opentelemetry.io/collector/extension/zpagesextension v0.96.0
+  - gomod: go.opentelemetry.io/collector/extension/zpagesextension v0.152.0
 
 providers:
-  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v0.96.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v0.96.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v0.96.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.58.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.58.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.58.0
