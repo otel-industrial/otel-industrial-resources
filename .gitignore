@@ -34,4 +34,4 @@ dist/
 Thumbs.db
 
 # Local collector config — copy from config.example.yaml
-config.yaml
+/config.yaml
