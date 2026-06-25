@@ -11,7 +11,7 @@ The goal is to help practitioners discover existing work, identify collaboration
 | [Modbus Receiver](https://github.com/lukaszciukaj/modbusreceiver)                     | OpenTelemetry Collector receiver for Modbus devices and industrial equipment.                   | 🟡 Experimental       | [lukaszciukaj](https://github.com/lukaszciukaj) |
 | [OPC UA Receiver](https://github.com/bruegth/opentelemetry-collector-opcua-receiver)  | OpenTelemetry Collector receiver for OPC UA servers and industrial systems.                     | 🟡 Experimental       | [bruegth](https://github.com/bruegth)           |
 | [OpenTelemetry MQTT Sparkplug](https://github.com/jmacd/opentelemetry-mqtt-sparkplug) | MQTT Sparkplug protocol support for OpenTelemetry Collector.                                    | 🔵 Active Development | [jmacd](https://github.com/jmacd)               |
-| [mqtt2otel](https://github.com/OSgAgA/mqtt2otel)                                      | MQTT-to-OpenTelemetry bridge that transforms MQTT messages into OpenTelemetry metrics and logs. | 🟢 Active             | [OSgAgA](https://github.com/OSgAgA)             |
+| [mqtt2otel](https://github.com/OSgAgA/mqtt2otel)                                      | MQTT-to-OpenTelemetry bridge that transforms MQTT messages into OpenTelemetry metrics and logs. | 🟡 Experimental            | [OSgAgA](https://github.com/OSgAgA)             |
 
 ## Contributing
 
