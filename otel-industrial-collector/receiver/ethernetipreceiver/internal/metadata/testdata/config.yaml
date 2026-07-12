@@ -1,0 +1,43 @@
+default:
+all_set:
+  metrics:
+    ethernetip.device.up:
+      enabled: true
+    ethernetip.tag.value:
+      enabled: true
+  resource_attributes:
+    ethernetip.device.address:
+      enabled: true
+    ethernetip.device.name:
+      enabled: true
+none_set:
+  metrics:
+    ethernetip.device.up:
+      enabled: false
+    ethernetip.tag.value:
+      enabled: false
+  resource_attributes:
+    ethernetip.device.address:
+      enabled: false
+    ethernetip.device.name:
+      enabled: false
+filter_set_include:
+  resource_attributes:
+    ethernetip.device.address:
+      enabled: true
+      metrics_include:
+        - regexp: ".*"
+    ethernetip.device.name:
+      enabled: true
+      metrics_include:
+        - regexp: ".*"
+filter_set_exclude:
+  resource_attributes:
+    ethernetip.device.address:
+      enabled: true
+      metrics_exclude:
+        - strict: "ethernetip.device.address-val"
+    ethernetip.device.name:
+      enabled: true
+      metrics_exclude:
+        - strict: "ethernetip.device.name-val"
