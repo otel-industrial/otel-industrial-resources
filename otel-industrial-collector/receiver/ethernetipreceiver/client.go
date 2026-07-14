@@ -13,12 +13,13 @@ type cipClient interface {
 	Connect() error
 	Disconnect() error
 	IsConnected() bool
+	ReadTag(tagName string) (float64, error)
 }
 
 // gologixClient adapts *gologix.Client to the cipClient interface.
 type gologixClient struct {
-	endpoint string
-	client   *gologix.Client
+	endpoint  string
+	client    *gologix.Client
 	connected bool
 }
 
@@ -46,4 +47,17 @@ func (c *gologixClient) Disconnect() error {
 
 func (c *gologixClient) IsConnected() bool {
 	return c.connected
+}
+
+// ReadTag reads a single tag and returns its value as a float64.
+// This is a simplification for the initial implementation: gologix.Read
+// requires a typed destination, so we try float64 directly. Tags with
+// other underlying types (bool, int, etc.) will need broader type
+// handling in a later milestone.
+func (c *gologixClient) ReadTag(tagName string) (float64, error) {
+	var value float64
+	if err := c.client.Read(tagName, &value); err != nil {
+		return 0, fmt.Errorf("reading tag %q: %w", tagName, err)
+	}
+	return value, nil
 }

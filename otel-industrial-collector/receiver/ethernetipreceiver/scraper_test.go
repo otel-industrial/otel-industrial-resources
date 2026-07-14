@@ -18,6 +18,8 @@ import (
 type fakeCIPClient struct {
 	connectErr error
 	connected  bool
+	readValue  float64
+	readErr    error
 }
 
 func (f *fakeCIPClient) Connect() error {
@@ -75,4 +77,11 @@ func TestScrapeDeviceDown(t *testing.T) {
 
 	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
 	assert.False(t, client.connected)
+}
+
+func (f *fakeCIPClient) ReadTag(tagName string) (float64, error) {
+	if f.readErr != nil {
+		return 0, f.readErr
+	}
+	return f.readValue, nil
 }
