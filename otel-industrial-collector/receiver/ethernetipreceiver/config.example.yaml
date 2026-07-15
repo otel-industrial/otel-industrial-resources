@@ -1,0 +1,22 @@
+receivers:
+  ethernetip:
+    endpoint: "127.0.0.1"
+    collection_interval: 5s
+    timeout: 5s
+    tags:
+      - testtag
+      - temperature
+      - pumpstatus
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    metrics:
+      receivers: [ethernetip]
+      exporters: [debug]
