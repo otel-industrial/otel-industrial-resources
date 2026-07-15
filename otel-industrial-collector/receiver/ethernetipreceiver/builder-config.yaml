@@ -1,0 +1,16 @@
+dist:
+  name: otelcol-ethernetip
+  description: OpenTelemetry Collector with EtherNet/IP receiver
+  output_path: ./bin
+  otelcol_version: 0.152.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/nopreceiver v0.152.0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.0
+    path: ./
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.152.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.152.0
