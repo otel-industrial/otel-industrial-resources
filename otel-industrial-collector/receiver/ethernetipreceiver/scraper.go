@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 
+	"go.uber.org/zap"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
@@ -28,9 +29,6 @@ func newScraper(cfg *Config, settings receiver.Settings) *ethernetipScraper {
 }
 
 func (s *ethernetipScraper) start(_ context.Context, _ component.Host) error {
-	// Attempt an initial connection so failures surface early, but don't
-	// fail startup if the device is temporarily unreachable — the scrape
-	// loop will retry and report device.up=0 until it succeeds.
 	if err := s.client.Connect(); err != nil {
 		s.settings.Logger.Warn("initial connection to EtherNet/IP device failed, will retry on next scrape")
 	}
@@ -40,19 +38,31 @@ func (s *ethernetipScraper) start(_ context.Context, _ component.Host) error {
 func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 	now := pcommon.NewTimestampFromTime(timeNow())
 
-	up := int64(1)
 	if !s.client.IsConnected() {
 		if err := s.client.Connect(); err != nil {
-			up = 0
-		} else {
-			up = 1
+			s.mb.RecordEthernetipDeviceUpDataPoint(now, 0)
+			s.settings.Logger.Warn("device unreachable, skipping tag reads this cycle")
+			return s.emit(), nil
 		}
 	}
 
-	s.mb.RecordEthernetipDeviceUpDataPoint(now, up)
+	s.mb.RecordEthernetipDeviceUpDataPoint(now, 1)
 
+	for _, tagName := range s.cfg.Tags {
+		value, err := s.client.ReadTag(tagName)
+		if err != nil {
+			s.settings.Logger.Warn("failed to read tag, skipping",
+				zap.String("tag", tagName), zap.Error(err))
+			continue
+		}
+		s.mb.RecordEthernetipTagValueDataPoint(now, value, tagName)
+	}
+
+	return s.emit(), nil
+}
+
+func (s *ethernetipScraper) emit() pmetric.Metrics {
 	rb := s.mb.NewResourceBuilder()
 	rb.SetEthernetipDeviceAddress(s.cfg.Endpoint)
-
-	return s.mb.Emit(metadata.WithResource(rb.Emit())), nil
+	return s.mb.Emit(metadata.WithResource(rb.Emit()))
 }

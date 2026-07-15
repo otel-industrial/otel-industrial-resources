@@ -14,12 +14,12 @@ import (
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
-// fakeCIPClient lets tests control connection behavior without a real PLC.
+// fakeCIPClient lets tests control connection and read behavior without a real PLC.
 type fakeCIPClient struct {
 	connectErr error
 	connected  bool
-	readValue  float64
-	readErr    error
+	readValues map[string]float64
+	readErrs   map[string]error
 }
 
 func (f *fakeCIPClient) Connect() error {
@@ -40,12 +40,19 @@ func (f *fakeCIPClient) IsConnected() bool {
 	return f.connected
 }
 
-func newTestScraper(t *testing.T, client cipClient) *ethernetipScraper {
+func (f *fakeCIPClient) ReadTag(tagName string) (float64, error) {
+	if err, ok := f.readErrs[tagName]; ok {
+		return 0, err
+	}
+	return f.readValues[tagName], nil
+}
+
+func newTestScraper(t *testing.T, client cipClient, tags []string) *ethernetipScraper {
 	t.Helper()
 
 	cfg := createDefaultConfig().(*Config)
 	cfg.Endpoint = "127.0.0.1:44818"
-	cfg.Tags = []string{"TestTag"}
+	cfg.Tags = tags
 
 	settings := receivertest.NewNopSettings(metadata.Type)
 
@@ -54,34 +61,39 @@ func newTestScraper(t *testing.T, client cipClient) *ethernetipScraper {
 	return s
 }
 
-func TestScrapeDeviceUp(t *testing.T) {
-	client := &fakeCIPClient{}
-	s := newTestScraper(t, client)
+func TestScrapeAllTagsSucceed(t *testing.T) {
+	client := &fakeCIPClient{
+		readValues: map[string]float64{"TagA": 1.5, "TagB": 2.5},
+	}
+	s := newTestScraper(t, client, []string{"TagA", "TagB"})
 
 	timeNow = func() time.Time { return time.Unix(0, 0) }
 	defer func() { timeNow = time.Now }()
 
 	metrics, err := s.scrape(context.Background())
 	require.NoError(t, err)
-
 	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
 	assert.True(t, client.connected)
 }
 
-func TestScrapeDeviceDown(t *testing.T) {
-	client := &fakeCIPClient{connectErr: errors.New("connection refused")}
-	s := newTestScraper(t, client)
+func TestScrapeOneTagFailsOthersSucceed(t *testing.T) {
+	client := &fakeCIPClient{
+		readValues: map[string]float64{"TagA": 1.5},
+		readErrs:   map[string]error{"TagB": errors.New("tag not found")},
+	}
+	s := newTestScraper(t, client, []string{"TagA", "TagB"})
 
 	metrics, err := s.scrape(context.Background())
 	require.NoError(t, err)
-
 	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
-	assert.False(t, client.connected)
 }
 
-func (f *fakeCIPClient) ReadTag(tagName string) (float64, error) {
-	if f.readErr != nil {
-		return 0, f.readErr
-	}
-	return f.readValue, nil
+func TestScrapeDeviceDownSkipsTags(t *testing.T) {
+	client := &fakeCIPClient{connectErr: errors.New("connection refused")}
+	s := newTestScraper(t, client, []string{"TagA"})
+
+	metrics, err := s.scrape(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
+	assert.False(t, client.connected)
 }
