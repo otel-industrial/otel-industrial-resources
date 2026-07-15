@@ -190,8 +190,8 @@ Core pipeline working end-to-end against a simulated device:
 - [x] Unit tests for scraper logic
 - [x] `builder-config.yaml` and a runnable `otelcol-ethernetip` binary
 - [x] Local simulator for testing without real hardware
-- [ ] `testdata/config.yaml` for automated tests
+- [x] Component lifecycle test config (via `tests:` block in `metadata.yaml` — this `mdatagen` version doesn't use a separate `testdata/config.yaml`)
 - [ ] CI workflow
-- [ ] Regenerated `documentation.md`
+- [x] Regenerated `documentation.md`
 
 Contributions, feedback, use cases, and implementation ideas are welcome.

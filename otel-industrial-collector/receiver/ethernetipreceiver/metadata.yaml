@@ -43,3 +43,11 @@ metrics:
     gauge:
       value_type: double
     attributes: [ethernetip.tag.name]
+
+tests:
+  config:
+    endpoint: "127.0.0.1"
+    collection_interval: 5s
+    timeout: 5s
+    tags:
+      - testtag
