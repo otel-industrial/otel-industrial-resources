@@ -76,5 +76,8 @@ func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 func (s *ethernetipScraper) emit() pmetric.Metrics {
 	rb := s.mb.NewResourceBuilder()
 	rb.SetEthernetipDeviceAddress(s.cfg.Endpoint)
+	if s.cfg.DeviceName != "" {
+		rb.SetEthernetipDeviceName(s.cfg.DeviceName)
+	}
 	return s.mb.Emit(metadata.WithResource(rb.Emit()))
 }

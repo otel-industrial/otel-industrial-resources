@@ -17,6 +17,11 @@ type Config struct {
 	// Endpoint is the address of the EtherNet/IP device, e.g. "192.168.1.10".
 	Endpoint string `mapstructure:"endpoint"`
 
+	// DeviceName is an optional user-friendly name for the device,
+	// populated into the ethernetip.device.name resource attribute.
+	// If empty, that attribute is omitted from emitted metrics.
+	DeviceName string `mapstructure:"device_name"`
+
 	// Tags is the fixed list of PLC tag names to poll.
 	Tags []string `mapstructure:"tags"`
 

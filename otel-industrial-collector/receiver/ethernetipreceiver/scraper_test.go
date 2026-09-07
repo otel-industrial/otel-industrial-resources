@@ -130,3 +130,27 @@ func TestShutdownDisconnects(t *testing.T) {
 	require.NoError(t, s.shutdown(context.Background()))
 	assert.True(t, client.disconnectCalled)
 }
+
+func TestEmitSetsDeviceNameWhenConfigured(t *testing.T) {
+	client := &fakeCIPClient{connected: true, readValues: map[string]float64{"TagA": 1}}
+	s := newTestScraper(t, client, []string{"TagA"})
+	s.cfg.DeviceName = "line1-plc"
+
+	metrics, err := s.scrape(context.Background())
+	require.NoError(t, err)
+	rm := metrics.ResourceMetrics().At(0)
+	name, ok := rm.Resource().Attributes().Get("ethernetip.device.name")
+	require.True(t, ok)
+	assert.Equal(t, "line1-plc", name.Str())
+}
+
+func TestEmitOmitsDeviceNameWhenNotConfigured(t *testing.T) {
+	client := &fakeCIPClient{connected: true, readValues: map[string]float64{"TagA": 1}}
+	s := newTestScraper(t, client, []string{"TagA"})
+
+	metrics, err := s.scrape(context.Background())
+	require.NoError(t, err)
+	rm := metrics.ResourceMetrics().At(0)
+	_, ok := rm.Resource().Attributes().Get("ethernetip.device.name")
+	assert.False(t, ok)
+}
