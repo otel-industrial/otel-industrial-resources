@@ -73,6 +73,7 @@ The simulator serves a few fake tags (`testtag`, `temperature`, `pumpstatus`) wi
 receivers:
   ethernetip:
     endpoint: "127.0.0.1"       # device address, no port (gologix appends the default EtherNet/IP port)
+    device_name: "line1-plc"    # optional; populates ethernetip.device.name resource attribute
     collection_interval: 5s     # how often to poll
     timeout: 5s                 # per-request timeout
     tags:
@@ -84,8 +85,9 @@ receivers:
 | Field | Description |
 |---|---|
 | `endpoint` | Device IP address or hostname, without a port. |
+| `device_name` | Optional user-friendly name for the device. If set, populates the `ethernetip.device.name` resource attribute; otherwise that attribute is omitted. |
 | `collection_interval` | How often to poll the device. |
-| `timeout` | Per-request CIP timeout. |
+| `timeout` | Per-request CIP timeout, applied to the underlying connection's socket timeout. |
 | `tags` | Fixed list of PLC tag names to poll each cycle. |
 
 ## Metrics
