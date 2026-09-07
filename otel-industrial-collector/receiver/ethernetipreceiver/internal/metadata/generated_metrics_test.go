@@ -109,13 +109,11 @@ func TestMetricsBuilder(t *testing.T) {
 				case "ethernetip.device.up":
 					assert.False(t, validatedMetrics["ethernetip.device.up"], "Found a duplicate in the metrics slice: ethernetip.device.up")
 					validatedMetrics["ethernetip.device.up"] = true
-					assert.Equal(t, pmetric.MetricTypeSum, mi.Type())
-					assert.Equal(t, 1, mi.Sum().DataPoints().Len())
+					assert.Equal(t, pmetric.MetricTypeGauge, mi.Type())
+					assert.Equal(t, 1, mi.Gauge().DataPoints().Len())
 					assert.Equal(t, "Whether the device responded successfully to the last poll (1) or not (0).", mi.Description())
 					assert.Equal(t, "1", mi.Unit())
-					assert.False(t, mi.Sum().IsMonotonic())
-					assert.Equal(t, pmetric.AggregationTemporalityCumulative, mi.Sum().AggregationTemporality())
-					dp := mi.Sum().DataPoints().At(0)
+					dp := mi.Gauge().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
 					assert.Equal(t, ts, dp.Timestamp())
 					assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())

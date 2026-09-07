@@ -29,10 +29,8 @@ metrics:
     stability: development
     description: Whether the device responded successfully to the last poll (1) or not (0).
     unit: "1"
-    sum:
+    gauge:
       value_type: int
-      monotonic: false
-      aggregation_temporality: cumulative
     attributes: []
 
   ethernetip.tag.value:
