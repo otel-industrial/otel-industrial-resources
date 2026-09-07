@@ -7,8 +7,8 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
-
 	"go.uber.org/zap"
+
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
@@ -24,7 +24,7 @@ func newScraper(cfg *Config, settings receiver.Settings) *ethernetipScraper {
 		cfg:      cfg,
 		settings: settings,
 		mb:       metadata.NewMetricsBuilder(cfg.MetricsBuilderConfig, settings),
-		client:   newGologixClient(cfg.Endpoint),
+		client:   newGologixClient(cfg.Endpoint, cfg.Timeout),
 	}
 }
 
@@ -38,10 +38,14 @@ func (s *ethernetipScraper) start(_ context.Context, _ component.Host) error {
 func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 	now := pcommon.NewTimestampFromTime(timeNow())
 
-	if !s.client.IsConnected() {
-		if err := s.client.Connect(); err != nil {
+	if err := s.client.Ping(); err != nil {
+		// The device may have dropped between scrapes even though we
+		// previously connected successfully. Try a fresh connect before
+		// giving up on this cycle.
+		if connectErr := s.client.Connect(); connectErr != nil {
 			s.mb.RecordEthernetipDeviceUpDataPoint(now, 0)
-			s.settings.Logger.Warn("device unreachable, skipping tag reads this cycle")
+			s.settings.Logger.Warn("device unreachable, skipping tag reads this cycle",
+				zap.Error(connectErr))
 			return s.emit(), nil
 		}
 	}

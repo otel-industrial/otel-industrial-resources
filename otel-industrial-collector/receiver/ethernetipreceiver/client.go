@@ -2,6 +2,7 @@ package ethernetipreceiver
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/danomagnum/gologix"
 )
@@ -12,7 +13,10 @@ import (
 type cipClient interface {
 	Connect() error
 	Disconnect() error
-	IsConnected() bool
+	// Ping performs a lightweight round-trip to the device (EtherNet/IP
+	// ListIdentity) to actively verify the connection is still alive,
+	// rather than trusting a locally cached connected/disconnected flag.
+	Ping() error
 	ReadTag(tagName string) (float64, error)
 }
 
@@ -23,10 +27,14 @@ type gologixClient struct {
 	connected bool
 }
 
-func newGologixClient(endpoint string) *gologixClient {
+func newGologixClient(endpoint string, timeout time.Duration) *gologixClient {
+	client := gologix.NewClient(endpoint)
+	if timeout > 0 {
+		client.SocketTimeout = timeout
+	}
 	return &gologixClient{
 		endpoint: endpoint,
-		client:   gologix.NewClient(endpoint),
+		client:   client,
 	}
 }
 
@@ -45,8 +53,16 @@ func (c *gologixClient) Disconnect() error {
 	return err
 }
 
-func (c *gologixClient) IsConnected() bool {
-	return c.connected
+// Ping actively checks the connection by issuing a ListIdentity request.
+// A cached "connected" flag can go stale if the socket drops between
+// scrapes, so this performs a real round-trip on every call instead.
+func (c *gologixClient) Ping() error {
+	if _, err := c.client.ListIdentity(); err != nil {
+		c.connected = false
+		return fmt.Errorf("pinging %s: %w", c.endpoint, err)
+	}
+	c.connected = true
+	return nil
 }
 
 // ReadTag reads a single tag and returns its value as a float64.

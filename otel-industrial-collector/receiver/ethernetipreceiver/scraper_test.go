@@ -18,6 +18,7 @@ import (
 type fakeCIPClient struct {
 	connectErr error
 	connected  bool
+	pingErr    error
 	readValues map[string]float64
 	readErrs   map[string]error
 }
@@ -36,8 +37,17 @@ func (f *fakeCIPClient) Disconnect() error {
 	return nil
 }
 
-func (f *fakeCIPClient) IsConnected() bool {
-	return f.connected
+// Ping mirrors the real client: succeeds only while connected, or if a
+// pingErr override is set (to simulate a drop between scrapes).
+func (f *fakeCIPClient) Ping() error {
+	if f.pingErr != nil {
+		f.connected = false
+		return f.pingErr
+	}
+	if !f.connected {
+		return errors.New("not connected")
+	}
+	return nil
 }
 
 func (f *fakeCIPClient) ReadTag(tagName string) (float64, error) {
@@ -91,6 +101,19 @@ func TestScrapeOneTagFailsOthersSucceed(t *testing.T) {
 func TestScrapeDeviceDownSkipsTags(t *testing.T) {
 	client := &fakeCIPClient{connectErr: errors.New("connection refused")}
 	s := newTestScraper(t, client, []string{"TagA"})
+
+	metrics, err := s.scrape(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
+	assert.False(t, client.connected)
+}
+
+func TestScrapeDetectsMidRunDrop(t *testing.T) {
+	client := &fakeCIPClient{connected: true, pingErr: errors.New("connection reset")}
+	s := newTestScraper(t, client, []string{"TagA"})
+
+	// Reconnect also fails, simulating a fully dead device.
+	client.connectErr = errors.New("connection refused")
 
 	metrics, err := s.scrape(context.Background())
 	require.NoError(t, err)
