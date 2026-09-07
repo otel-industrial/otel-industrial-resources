@@ -16,11 +16,12 @@ import (
 
 // fakeCIPClient lets tests control connection and read behavior without a real PLC.
 type fakeCIPClient struct {
-	connectErr error
-	connected  bool
-	pingErr    error
-	readValues map[string]float64
-	readErrs   map[string]error
+	connectErr       error
+	connected        bool
+	pingErr          error
+	readValues       map[string]float64
+	readErrs         map[string]error
+	disconnectCalled bool
 }
 
 func (f *fakeCIPClient) Connect() error {
@@ -34,6 +35,7 @@ func (f *fakeCIPClient) Connect() error {
 
 func (f *fakeCIPClient) Disconnect() error {
 	f.connected = false
+	f.disconnectCalled = true
 	return nil
 }
 
@@ -119,4 +121,12 @@ func TestScrapeDetectsMidRunDrop(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
 	assert.False(t, client.connected)
+}
+
+func TestShutdownDisconnects(t *testing.T) {
+	client := &fakeCIPClient{connected: true}
+	s := newTestScraper(t, client, []string{"TagA"})
+
+	require.NoError(t, s.shutdown(context.Background()))
+	assert.True(t, client.disconnectCalled)
 }

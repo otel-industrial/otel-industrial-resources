@@ -40,7 +40,7 @@ func createMetricsReceiver(
 
 	s := newScraper(rCfg, settings)
 
-	scrp, err := scraper.NewMetrics(s.scrape, scraper.WithStart(s.start))
+	scrp, err := scraper.NewMetrics(s.scrape, scraper.WithStart(s.start), scraper.WithShutdown(s.shutdown))
 	if err != nil {
 		return nil, err
 	}

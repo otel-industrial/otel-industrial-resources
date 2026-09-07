@@ -35,6 +35,14 @@ func (s *ethernetipScraper) start(_ context.Context, _ component.Host) error {
 	return nil
 }
 
+func (s *ethernetipScraper) shutdown(_ context.Context) error {
+	if err := s.client.Disconnect(); err != nil {
+		s.settings.Logger.Warn("error disconnecting from EtherNet/IP device during shutdown",
+			zap.Error(err))
+	}
+	return nil
+}
+
 func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 	now := pcommon.NewTimestampFromTime(timeNow())
 
