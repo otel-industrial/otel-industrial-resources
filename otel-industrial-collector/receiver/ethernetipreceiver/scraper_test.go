@@ -63,7 +63,8 @@ func newTestScraper(t *testing.T, client cipClient, tags []string) *ethernetipSc
 	t.Helper()
 
 	cfg := createDefaultConfig().(*Config)
-	cfg.Endpoint = "127.0.0.1:44818"
+	cfg.Host = "127.0.0.1"
+	cfg.Port = 44818
 	cfg.Tags = tags
 
 	settings := receivertest.NewNopSettings(metadata.Type)

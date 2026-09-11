@@ -27,13 +27,16 @@ type gologixClient struct {
 	connected bool
 }
 
-func newGologixClient(endpoint string, timeout time.Duration) *gologixClient {
-	client := gologix.NewClient(endpoint)
+func newGologixClient(host string, port uint, timeout time.Duration) *gologixClient {
+	client := gologix.NewClient(host)
+	if port > 0 {
+		client.Controller.Port = port
+	}
 	if timeout > 0 {
 		client.SocketTimeout = timeout
 	}
 	return &gologixClient{
-		endpoint: endpoint,
+		endpoint: host,
 		client:   client,
 	}
 }

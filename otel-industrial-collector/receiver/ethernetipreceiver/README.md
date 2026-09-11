@@ -41,7 +41,7 @@ This produces `./bin/otelcol-ethernetip` — a custom collector binary with the 
 cp config.example.yaml config.yaml
 ```
 
-Edit `config.yaml` — at minimum set `endpoint` to match your device (or leave as-is to point at the local simulator), and update `tags` to match the tag names available on your PLC.
+Edit `config.yaml` — at minimum set `host` to match your device (or leave as-is to point at the local simulator), and update `tags` to match the tag names available on your PLC. Set `port` only if your device uses something other than the default 44818.
 
 ### 3. Run
 
@@ -72,7 +72,8 @@ The simulator serves a few fake tags (`testtag`, `temperature`, `pumpstatus`) wi
 ```yaml
 receivers:
   ethernetip:
-    endpoint: "127.0.0.1"       # device address, no port (gologix appends the default EtherNet/IP port)
+    host: "127.0.0.1"           # device address or hostname, no port
+    port: 44818                  # CIP port; defaults to 44818, the standard EtherNet/IP port
     device_name: "line1-plc"    # optional; populates ethernetip.device.name resource attribute
     collection_interval: 5s     # how often to poll
     timeout: 5s                 # per-request timeout
@@ -84,7 +85,8 @@ receivers:
 
 | Field | Description |
 |---|---|
-| `endpoint` | Device IP address or hostname, without a port. |
+| `host` | Device IP address or hostname, without a port. |
+| `port` | CIP port on the device. Defaults to 44818. |
 | `device_name` | Optional user-friendly name for the device. If set, populates the `ethernetip.device.name` resource attribute; otherwise that attribute is omitted. |
 | `collection_interval` | How often to poll the device. |
 | `timeout` | Per-request CIP timeout, applied to the underlying connection's socket timeout. |
@@ -104,7 +106,7 @@ Both metrics share this resource attribute:
 
 | Attribute | Description |
 |---|---|
-| `ethernetip.device.address` | The configured device endpoint. |
+| `ethernetip.device.address` | The configured device host. |
 
 `ethernetip.tag.value` additionally carries:
 

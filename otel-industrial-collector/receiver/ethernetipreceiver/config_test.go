@@ -14,18 +14,18 @@ func TestConfigValidate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "missing endpoint",
-			cfg:     Config{Endpoint: "", Tags: []string{"TagA"}},
-			wantErr: "endpoint must be specified",
+			name:    "missing host",
+			cfg:     Config{Host: "", Tags: []string{"TagA"}},
+			wantErr: "host must be specified",
 		},
 		{
 			name:    "missing tags",
-			cfg:     Config{Endpoint: "127.0.0.1", Tags: nil},
+			cfg:     Config{Host: "127.0.0.1", Tags: nil},
 			wantErr: "at least one tag must be specified",
 		},
 		{
 			name: "valid config",
-			cfg:  Config{Endpoint: "127.0.0.1", Tags: []string{"TagA"}},
+			cfg:  Config{Host: "127.0.0.1", Tags: []string{"TagA"}},
 		},
 	}
 

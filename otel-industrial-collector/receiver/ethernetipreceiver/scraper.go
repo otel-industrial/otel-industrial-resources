@@ -24,7 +24,7 @@ func newScraper(cfg *Config, settings receiver.Settings) *ethernetipScraper {
 		cfg:      cfg,
 		settings: settings,
 		mb:       metadata.NewMetricsBuilder(cfg.MetricsBuilderConfig, settings),
-		client:   newGologixClient(cfg.Endpoint, cfg.Timeout),
+		client:   newGologixClient(cfg.Host, cfg.Port, cfg.Timeout),
 	}
 }
 
@@ -75,7 +75,7 @@ func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 
 func (s *ethernetipScraper) emit() pmetric.Metrics {
 	rb := s.mb.NewResourceBuilder()
-	rb.SetEthernetipDeviceAddress(s.cfg.Endpoint)
+	rb.SetEthernetipDeviceAddress(s.cfg.Host)
 	if s.cfg.DeviceName != "" {
 		rb.SetEthernetipDeviceName(s.cfg.DeviceName)
 	}

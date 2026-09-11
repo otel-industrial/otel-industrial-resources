@@ -14,8 +14,13 @@ type Config struct {
 	scraperhelper.ControllerConfig `mapstructure:",squash"`
 	metadata.MetricsBuilderConfig  `mapstructure:",squash"`
 
-	// Endpoint is the address of the EtherNet/IP device, e.g. "192.168.1.10".
-	Endpoint string `mapstructure:"endpoint"`
+	// Host is the address of the EtherNet/IP device, e.g. "192.168.1.10"
+	// or a hostname. Do not include a port here; use Port instead.
+	Host string `mapstructure:"host"`
+
+	// Port is the CIP port on the device. Defaults to 44818, the
+	// standard EtherNet/IP port.
+	Port uint `mapstructure:"port"`
 
 	// DeviceName is an optional user-friendly name for the device,
 	// populated into the ethernetip.device.name resource attribute.
@@ -30,8 +35,8 @@ type Config struct {
 }
 
 func (cfg *Config) Validate() error {
-	if cfg.Endpoint == "" {
-		return errors.New("endpoint must be specified")
+	if cfg.Host == "" {
+		return errors.New("host must be specified")
 	}
 	if len(cfg.Tags) == 0 {
 		return errors.New("at least one tag must be specified")

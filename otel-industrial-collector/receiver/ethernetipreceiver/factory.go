@@ -27,6 +27,7 @@ func createDefaultConfig() component.Config {
 		ControllerConfig:     scraperhelper.NewDefaultControllerConfig(),
 		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 		Timeout:              5 * time.Second,
+		Port:                 44818,
 	}
 }
 

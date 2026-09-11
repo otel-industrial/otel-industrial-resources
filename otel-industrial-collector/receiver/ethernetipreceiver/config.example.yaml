@@ -1,6 +1,8 @@
 receivers:
   ethernetip:
-    endpoint: "127.0.0.1"
+    host: "127.0.0.1"
+    port: 44818
+    device_name: "line1-plc"
     collection_interval: 5s
     timeout: 5s
     tags:

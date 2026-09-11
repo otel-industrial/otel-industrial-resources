@@ -16,12 +16,10 @@ import (
 // on any Accept() error (including "closed network connection"), so Serve()
 // never returns once started. We deliberately leak the server goroutines and
 // listener for the life of the test binary rather than trying to synchronize
-// on an exit that will never happen; see the goleak.IgnoreTopFunction calls
+// on an exit that will never happen; see the goleak.IgnoreAnyFunction calls
 // in generated_package_test.go (manually patched — see comment there).
 //
-// Because the ports are fixed, only one such server may run per test binary;
-// this is called once via sync.OnceFunc-style guarding in TestMain-adjacent
-// tests below rather than per-test.
+// Because the ports are fixed, only one such server may run per test binary.
 func startTestServer(t *testing.T, tagData map[string]any) {
 	t.Helper()
 
@@ -54,10 +52,10 @@ func startTestServer(t *testing.T, tagData map[string]any) {
 	t.Fatal("test server did not become ready in time")
 }
 
-// TestClientAgainstRealServer covers both the ReadTag type-fallback path
-// and the endpoint address format gologix accepts, against a single shared
-// real gologix.Server instance (the server's fixed ports and lack of clean
-// shutdown make running more than one instance per test binary unreliable).
+// TestClientAgainstRealServer covers the ReadTag type-fallback path and
+// host/port handling against a single shared real gologix.Server instance
+// (the server's fixed ports and lack of clean shutdown make running more
+// than one instance per test binary unreliable).
 func TestClientAgainstRealServer(t *testing.T) {
 	startTestServer(t, map[string]any{
 		"floattag": 3.14,
@@ -66,7 +64,7 @@ func TestClientAgainstRealServer(t *testing.T) {
 	})
 
 	t.Run("ReadTag type fallback", func(t *testing.T) {
-		client := newGologixClient("127.0.0.1", 2*time.Second)
+		client := newGologixClient("127.0.0.1", 44818, 2*time.Second)
 		require.NoError(t, client.Connect())
 
 		tests := []struct {
@@ -87,26 +85,30 @@ func TestClientAgainstRealServer(t *testing.T) {
 		}
 	})
 
-	t.Run("endpoint format", func(t *testing.T) {
+	t.Run("host formats", func(t *testing.T) {
 		tests := []struct {
-			name     string
-			endpoint string
-			wantErr  bool
+			name string
+			host string
+			port uint
 		}{
-			{"bare IP", "127.0.0.1", false},
-			{"IP with default port", "127.0.0.1:44818", true},
+			{"IP literal", "127.0.0.1", 44818},
+			{"hostname", "localhost", 44818},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				client := newGologixClient(tt.endpoint, 2*time.Second)
-				err := client.Connect()
-				if tt.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-				}
+				client := newGologixClient(tt.host, tt.port, 2*time.Second)
+				require.NoError(t, client.Connect())
 			})
 		}
+	})
+
+	t.Run("host must not include a port", func(t *testing.T) {
+		// A host string with an embedded port is not a supported
+		// configuration: Port is a separate field, and gologix treats
+		// the combined string as the dial address, producing a
+		// doubled/invalid port when Port is also set.
+		client := newGologixClient("127.0.0.1:44818", 44818, 2*time.Second)
+		require.Error(t, client.Connect())
 	})
 }
