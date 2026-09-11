@@ -1,0 +1,52 @@
+type: ethernetip
+
+status:
+  class: receiver
+  stability:
+    development: [metrics]
+  distributions: []
+  codeowners:
+    active: [lukaszciukaj]
+
+resource_attributes:
+  ethernetip.device.address:
+    description: The IP address or hostname of the EtherNet/IP device.
+    type: string
+    enabled: true
+  ethernetip.device.name:
+    description: A user-configured name for the device, if provided.
+    type: string
+    enabled: true
+
+attributes:
+  ethernetip.tag.name:
+    description: The name of the polled tag.
+    type: string
+
+metrics:
+  ethernetip.device.up:
+    enabled: true
+    stability: development
+    description: Whether the device responded successfully to the last poll (1) or not (0).
+    unit: "1"
+    gauge:
+      value_type: int
+    attributes: []
+
+  ethernetip.tag.value:
+    enabled: true
+    stability: development
+    description: The current value of a polled EtherNet/IP tag, as a float.
+    unit: "1"
+    gauge:
+      value_type: double
+    attributes: [ethernetip.tag.name]
+
+tests:
+  config:
+    host: "127.0.0.1"
+    port: 44818
+    collection_interval: 5s
+    timeout: 5s
+    tags:
+      - testtag

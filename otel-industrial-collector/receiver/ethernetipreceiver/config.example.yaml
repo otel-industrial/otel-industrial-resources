@@ -1,0 +1,24 @@
+receivers:
+  ethernetip:
+    host: "127.0.0.1"
+    port: 44818
+    device_name: "line1-plc"
+    collection_interval: 5s
+    timeout: 5s
+    tags:
+      - testtag
+      - temperature
+      - pumpstatus
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    metrics:
+      receivers: [ethernetip]
+      exporters: [debug]
