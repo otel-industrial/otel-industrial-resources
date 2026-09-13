@@ -2,6 +2,7 @@ package ethernetipreceiver
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/scraper/scraperhelper"
@@ -37,6 +38,9 @@ type Config struct {
 func (cfg *Config) Validate() error {
 	if cfg.Host == "" {
 		return errors.New("host must be specified")
+	}
+	if cfg.Port > 65535 {
+		return fmt.Errorf("port %d is not a valid TCP port (must be 0-65535; 0 uses the client default)", cfg.Port)
 	}
 	if len(cfg.Tags) == 0 {
 		return errors.New("at least one tag must be specified")

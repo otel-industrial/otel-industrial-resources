@@ -87,18 +87,32 @@ func TestClientAgainstRealServer(t *testing.T) {
 
 	t.Run("host formats", func(t *testing.T) {
 		tests := []struct {
-			name string
-			host string
-			port uint
+			name    string
+			host    string
+			port    uint
+			wantErr bool
 		}{
-			{"IP literal", "127.0.0.1", 44818},
-			{"hostname", "localhost", 44818},
+			{name: "IP literal", host: "127.0.0.1", port: 44818},
+			{name: "hostname", host: "localhost", port: 44818},
+			// port: 0 means "unset" - newGologixClient should leave
+			// gologix's own default (44818) in place rather than
+			// overriding it, so this should still connect.
+			{name: "unset port falls back to default", host: "127.0.0.1", port: 0},
+			// The test server only listens on 44818. Explicitly
+			// requesting a different port should fail to connect -
+			// proving Port is actually applied, not silently ignored.
+			{name: "non-default port is respected", host: "127.0.0.1", port: 44819, wantErr: true},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				client := newGologixClient(tt.host, tt.port, 2*time.Second)
-				require.NoError(t, client.Connect())
+				err := client.Connect()
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
 			})
 		}
 	})

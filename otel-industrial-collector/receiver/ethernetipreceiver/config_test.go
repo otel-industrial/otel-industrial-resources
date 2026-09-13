@@ -27,6 +27,19 @@ func TestConfigValidate(t *testing.T) {
 			name: "valid config",
 			cfg:  Config{Host: "127.0.0.1", Tags: []string{"TagA"}},
 		},
+		{
+			name:    "port out of range",
+			cfg:     Config{Host: "127.0.0.1", Port: 70000, Tags: []string{"TagA"}},
+			wantErr: "is not a valid TCP port",
+		},
+		{
+			name: "valid config with unset port",
+			cfg:  Config{Host: "127.0.0.1", Port: 0, Tags: []string{"TagA"}},
+		},
+		{
+			name: "valid config with non-default port",
+			cfg:  Config{Host: "127.0.0.1", Port: 44819, Tags: []string{"TagA"}},
+		},
 	}
 
 	for _, tt := range tests {
