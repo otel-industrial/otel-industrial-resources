@@ -1,0 +1,9 @@
+# Build artifacts
+/bin/
+otelcol-ethernetip
+
+# Local runtime config (may contain real device IPs/credentials)
+/config.yaml
+
+# OS cruft
+.DS_Store
