@@ -1,6 +1,6 @@
 # EtherNet/IP Receiver
 
-> **Status:** Initial Implementation In Progress
+> **Status:** Experimental — core pipeline merged and working end-to-end against a simulated device.
 
 The EtherNet/IP Receiver is an experimental community effort to explore collecting telemetry from EtherNet/IP (CIP) enabled industrial devices using the OpenTelemetry Collector.
 
@@ -96,7 +96,7 @@ receivers:
 
 ### `ethernetip.device.up`
 
-Whether the device responded successfully to the last poll (`1`) or not (`0`). Emitted once per scrape cycle regardless of tag configuration.
+Whether the device responded successfully to the last poll (`1`) or not (`0`), reported as a gauge. Emitted once per scrape cycle regardless of tag configuration. Connection health is actively verified each cycle (an EtherNet/IP `ListIdentity` request), not inferred from a cached connection flag.
 
 ### `ethernetip.tag.value`
 
@@ -121,19 +121,23 @@ Full metric documentation is auto-generated in `documentation.md` by `mdatagen` 
 ```
 ethernetipreceiver/
 ├── config.go                    # Config struct and validation
+├── config_test.go               # Config.Validate() tests
 ├── doc.go                       # go:generate mdatagen directive
 ├── factory.go                   # OTel component factory registration
 ├── scraper.go                   # Polling loop, metric emission (no separate receiver.go — a single scraper's lifecycle is fully handled by scraperhelper)
 ├── client.go                    # gologix client wrapper
-├── metadata.yaml                # Metric definitions (source of truth)
+├── client_test.go               # Integration tests against a real gologix.Server
+├── scraper_test.go              # Scraper unit tests (fake client)
+├── metadata.yaml                # Metric definitions (source of truth), including the tests: block used by the generated component lifecycle test
 ├── documentation.md             # Auto-generated metric docs (from mdatagen)
+├── generated_component_test.go  # Auto-generated component lifecycle tests
+├── generated_package_test.go    # Auto-generated package tests (manually patched with goleak exceptions — see comment in the file)
 ├── internal/
 │   └── metadata/                # Auto-generated from metadata.yaml
-├── testdata/
-│   └── config.yaml              # Test configuration
 ├── cmd/
 │   └── simulator/                # EtherNet/IP simulator for local testing
 │       └── main.go
+├── config.example.yaml          # Example runtime configuration
 └── builder-config.yaml          # OCB manifest for building the collector
 ```
 
@@ -146,10 +150,13 @@ cd ~/your/ethernetipreceiver
 go generate ./...
 ```
 
+> Note: `go generate` will overwrite the manual `goleak` patch in `generated_package_test.go`. See the comment at the top of that file for what to re-apply.
+
 ## Development
 
 ```bash
 make test    # run tests
+make lint    # run golangci-lint
 make build   # build the custom collector binary
 make run     # run the collector (requires build first)
 make tidy    # tidy go modules
@@ -162,40 +169,42 @@ The initial focus is to establish the receiver architecture and demonstrate tele
 
 The first implementation milestone is a read-only, single-device scraper that validates the full pipeline (config → CIP client → scraper → OpenTelemetry metrics), starting with a single metric (device connectivity/health) before expanding to a fixed list of polled tags.
 
-Future milestones may include:
+## Roadmap
 
-- Batched multi-service reads
-- Tag/UDT discovery instead of a static tag list
-- Multiple vendor support
-- Multiple device support in a single receiver instance
-- Performance optimization
-- Configuration improvements
-- Additional CIP object support
+The current implementation is a deliberately narrow v1: one device, a fixed tag list, Rockwell-only tag-based access. The items below are follow-up milestones, not commitments with dates — feedback and contributions on any of these are welcome.
+
+- **Generic CIP object access, beyond Rockwell.** EtherNet/IP itself is an open, multi-vendor protocol (ODVA-standardized CIP), but the current tag-name addressing (`tags: [testtag, ...]`) only works because `gologix` implements Rockwell's proprietary Symbol Object. Reaching non-Rockwell devices means adding a second addressing mode based on generic CIP objects — Class/Instance/Attribute access (e.g. via `gologix`'s `GetAttrSingle`/`GetAttrList`/`GenericCIPMessage` primitives) instead of symbolic tag names. This is a larger design effort: it needs its own config shape (something closer to how the sibling `modbusreceiver` declares register address/type per point) since there's no vendor-provided name resolution to lean on.
+- **Tag/UDT discovery instead of a static tag list.** Use `gologix`'s `ListAllTags`/`ListAllPrograms` to discover available tags and their real CIP types, rather than requiring users to hand-list tag names in config and having `ReadTag` guess the type by probing.
+- **Batched multi-service reads.** CIP supports reading multiple tags in a single request. Worthwhile once tag lists grow beyond a handful of tags, to cut down round-trips per scrape cycle.
+- **Multiple device support in a single receiver instance.** Currently one receiver instance talks to one device; polling a fleet of PLCs means running one receiver instance per device today.
+- **Performance and configuration improvements**, informed by real-world use once this is running against actual hardware rather than only the simulator.
 
 ## Design Considerations
 
 - **CIP client library.** Decision: using `danomagnum/gologix`. It's MIT licensed, actively maintained with regular releases, and by far the most widely adopted Go option for this protocol (imported by ~26 other modules vs. 0-1 for alternatives). It provides typed tag read/write, multi-tag batching, tag/program discovery, and UDT decoding out of the box, modeled after the established Python `pylogix` library. Scope is Rockwell ControlLogix/CompactLogix/Micro820 for v1 (not older PCCC-based PLC5/SLC/MicroLogix).
   - Other options considered: `iceisfun/goindustrial` (MIT, broader low-level feature set, far less adoption) and `loki-os/go-ethernet-ip` (WTFPL, likely needs legal review for upstream OTel inclusion, largely unmaintained).
-- **Generic CIP vs. vendor-specific tag access.** CIP's object model is broad (vendor-specific objects, assemblies, tag-based addressing). `gologix` leans toward Rockwell/Logix-style tag access rather than generic CIP objects; the initial implementation follows that path, with broader vendor-neutral support as a future milestone.
+- **Generic CIP vs. vendor-specific tag access.** `gologix` leans toward Rockwell/Logix-style tag access rather than generic CIP objects; the initial implementation follows that path. See Roadmap above for the plan to reach non-Rockwell devices.
 - **Read-only scope.** `gologix` supports writing tags, but the receiver only uses read paths, consistent with the read-only, non-invasive design goal for OT environments.
+- **Host and port are separate config fields.** An earlier iteration combined them into a single `host:port` string, which broke because `gologix` appends its own default port internally. `host` is now host-only and `port` is a dedicated field (default 44818), wired directly into the client.
 - **Polling model.** The first implementation uses a fixed, configured list of tags per device polled on an interval via `scraperhelper`, rather than a full subscription/discovery model. Discovery-based polling is a future milestone.
 - **Batched reads.** CIP supports multi-service (batched) read requests, which can significantly reduce round-trips when polling many tags. Deferred until basic single-tag polling is working end-to-end (now proven — see Status below).
 - **Tag type handling.** CIP tags can be float, integer, or boolean at the wire level. `ReadTag` currently tries these types in sequence rather than discovering the tag's real type up front — simple and working, but not efficient for large tag lists. A future milestone should read type information via tag discovery instead of probing.
-- **OT network safety.** Polling behavior (frequency, request pacing, connection handling) should be designed conservatively to avoid impacting devices that may be sensitive to unexpected load.
+- **OT network safety.** Polling behavior (frequency, request pacing, connection handling) should be designed conservatively to avoid impacting devices that may be sensitive to unexpected load. Connection health is verified actively each cycle rather than trusted from a cached flag, so a dropped connection is detected promptly rather than silently reporting stale "up" status.
 
 ## Status
 
-Core pipeline working end-to-end against a simulated device:
+Core pipeline merged and working end-to-end against a simulated device, with two full rounds of review feedback addressed:
 
 - [x] Receiver scaffolding (config, factory, metadata.yaml)
 - [x] `gologix` client wrapper
-- [x] First end-to-end metric (device connectivity)
+- [x] First end-to-end metric (device connectivity, as a gauge with active health checks)
 - [x] Static tag list polling
-- [x] Unit tests for scraper logic
+- [x] Unit and integration tests (fake-client scraper tests, plus real `gologix.Server` integration tests for type handling and host/port behavior)
 - [x] `builder-config.yaml` and a runnable `otelcol-ethernetip` binary
 - [x] Local simulator for testing without real hardware
 - [x] Component lifecycle test config (via `tests:` block in `metadata.yaml` — this `mdatagen` version doesn't use a separate `testdata/config.yaml`)
-- [ ] CI workflow
 - [x] Regenerated `documentation.md`
+- [x] `golangci-lint` clean
+- [ ] CI workflow
 
 Contributions, feedback, use cases, and implementation ideas are welcome.
