@@ -6,6 +6,8 @@ The goal is to help practitioners discover existing work, identify collaboration
 
 ## Projects
 
+🟡 Experimental (early, may still change)<br>🔵 Active Development (evolving, with a real project depending on it)
+
 | Project                                                                               | Description                                                                                     | Status                | Author                                          |
 | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------- |
 | [EtherNet/IP Receiver](https://github.com/otel-industrial/otel-industrial-resources/tree/main/otel-industrial-collector/receiver/ethernetipreceiver) | OpenTelemetry Collector receiver for EtherNet/IP (CIP) enabled industrial devices, e.g. Rockwell PLCs. Developed in this org. | 🟡 Experimental       | [lukaszciukaj](https://github.com/lukaszciukaj) |
