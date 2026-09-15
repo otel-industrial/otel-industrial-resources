@@ -1,0 +1,35 @@
+# Modbus edge gateway
+#
+# Target: a small edge box on a Modbus TCP/RTU segment (water/wastewater, HVAC,
+# building automation, energy metering). Minimal footprint - only what a
+# single-protocol Modbus gateway needs.
+#
+# Build: ocb --config modbus-edge-gateway.yaml
+dist:
+  name: otelcol-modbus-edge
+  description: Minimal OpenTelemetry Collector for Modbus edge gateways
+  output_path: ./otelcol-modbus-edge
+  otelcol_version: 0.160.0
+
+receivers:
+  - gomod: github.com/lukaszciukaj/modbusreceiver v0.1.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.160.0
+
+extensions:
+  # Persistent send-queue: survives collector restarts and buffers telemetry
+  # across intermittent uplink outages common in industrial sites.
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.160.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.66.0

@@ -1,0 +1,53 @@
+# Full industrial gateway (all protocols, batteries included)
+#
+# Target: a single mixed-protocol gateway box that talks to more than one kind
+# of industrial equipment at once, and that also wants richer processing and
+# self-observability. Larger binary than the minimal per-protocol manifests -
+# use one of those instead when you only need a single protocol.
+#
+# Bundles every industrial receiver in this catalog plus the optional components
+# left out of the minimal manifests (host self-monitoring, resource enrichment,
+# filtering, health check).
+#
+# Build: ocb --config industrial-gateway-full.yaml
+dist:
+  name: otelcol-industrial-gateway
+  description: Full multi-protocol OpenTelemetry Collector for industrial gateways
+  output_path: ./otelcol-industrial-gateway
+  otelcol_version: 0.160.0
+
+receivers:
+  - gomod: github.com/lukaszciukaj/modbusreceiver v0.1.0
+  # Untagged / subdirectory modules pinned via pseudo-version (see per-protocol manifests).
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.0-20260914133421-9ff232a883a0
+  - gomod: github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua v0.0.0-20260603175247-91d3129184f0
+  - gomod: github.com/jmacd/opentelemetry-mqtt-sparkplug v0.0.0-20260526170218-8540b400c6d8
+    import: github.com/jmacd/opentelemetry-mqtt-sparkplug/sparkplugreceiver
+  # Self-monitoring of the gateway host.
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.160.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
+  # resource sets static attributes from config (site, line, asset) - the way to
+  # identify the telemetry source on a gateway. resourcedetection is deliberately
+  # omitted: it can only describe the collector host, not the remote devices this
+  # gateway polls, so it adds no source identity here (and pulls in large cloud SDKs).
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.160.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.160.0
+
+extensions:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.160.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.66.0

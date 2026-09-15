@@ -1,0 +1,37 @@
+# MQTT Sparkplug B / IIoT
+#
+# Target: an edge box subscribed to an MQTT broker carrying Sparkplug B, the
+# common IIoT payload spec for edge nodes and devices. Minimal footprint.
+#
+# Build: ocb --config iiot-sparkplug.yaml
+dist:
+  name: otelcol-sparkplug
+  description: Minimal OpenTelemetry Collector for MQTT Sparkplug B / IIoT
+  output_path: ./otelcol-sparkplug
+  otelcol_version: 0.160.0
+
+receivers:
+  # Untagged module; pinned to a repo commit via pseudo-version. The receiver
+  # package is in a subdirectory, so the import path is set explicitly.
+  - gomod: github.com/jmacd/opentelemetry-mqtt-sparkplug v0.0.0-20260526170218-8540b400c6d8
+    import: github.com/jmacd/opentelemetry-mqtt-sparkplug/sparkplugreceiver
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.160.0
+
+extensions:
+  # Persistent send-queue: survives collector restarts and buffers telemetry
+  # across intermittent uplink outages common in industrial sites.
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.160.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.66.0
