@@ -18,8 +18,8 @@ dist:
 
 receivers:
   - gomod: github.com/lukaszciukaj/modbusreceiver v0.1.0
-  # Untagged / subdirectory modules pinned via pseudo-version (see per-protocol manifests).
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.0-20260914133421-9ff232a883a0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1
+  # Subdirectory / untagged modules pinned via pseudo-version (see per-protocol manifests).
   - gomod: github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua v0.0.0-20260603175247-91d3129184f0
   - gomod: github.com/jmacd/opentelemetry-mqtt-sparkplug v0.0.0-20260526170218-8540b400c6d8
     import: github.com/jmacd/opentelemetry-mqtt-sparkplug/sparkplugreceiver
