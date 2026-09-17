@@ -11,8 +11,7 @@ dist:
   otelcol_version: 0.160.0
 
 receivers:
-  # This receiver's module is untagged; pinned to a repo commit via pseudo-version.
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.0-20260914133421-9ff232a883a0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1
 
 processors:
   - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
