@@ -1,0 +1,27 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'otel-industrial-collector/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'otel-industrial-collector/**'
+      - '.github/workflows/build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+      - name: Build all collector distributions
+        working-directory: otel-industrial-collector/manifests
+        run: make

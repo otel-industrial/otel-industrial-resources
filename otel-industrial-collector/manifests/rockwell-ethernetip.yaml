@@ -1,0 +1,34 @@
+# Rockwell / Allen-Bradley EtherNet/IP cell
+#
+# Target: an edge box polling EtherNet/IP (CIP) devices - Rockwell/Allen-Bradley
+# PLCs and other CIP-enabled equipment on a control cell. Minimal footprint.
+#
+# Build: ocb --config rockwell-ethernetip.yaml
+dist:
+  name: otelcol-ethernetip
+  description: Minimal OpenTelemetry Collector for Rockwell/Allen-Bradley EtherNet/IP cells
+  output_path: ./otelcol-ethernetip
+  otelcol_version: 0.160.0
+
+receivers:
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.160.0
+
+extensions:
+  # Persistent send-queue: survives collector restarts and buffers telemetry
+  # across intermittent uplink outages common in industrial sites.
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.160.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.66.0
