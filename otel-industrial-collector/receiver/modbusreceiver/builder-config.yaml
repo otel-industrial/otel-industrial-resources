@@ -8,13 +8,6 @@
 #   builder --config builder-config.yaml
 #   # or: make build
 #
-# NOTE: During local development, the receiver is referenced via `path: ./`
-# which points to the local source. Once you tag a release and push to GitHub,
-# replace the `path` line with a versioned gomod reference:
-#
-#   receivers:
-#     - gomod: github.com/lukaszciukaj/modbusreceiver v0.1.0
-#       # remove the path line
 
 dist:
   name: otelcol-modbus
@@ -23,7 +16,7 @@ dist:
   otelcol_version: 0.152.0
 
 receivers:
-  - gomod: github.com/lukaszciukaj/modbusreceiver v0.0.1
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.0.0
     path: ./   # local dev only — remove after tagging a release
 
 exporters:

@@ -1,4 +1,4 @@
-module github.com/lukaszciukaj/modbusreceiver
+module github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver
 
 go 1.25.0
 

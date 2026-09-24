@@ -1,9 +1,8 @@
 # modbusreceiver
 
-[![CI](https://github.com/lukaszciukaj/modbusreceiver/actions/workflows/ci.yaml/badge.svg)](https://github.com/lukaszciukaj/modbusreceiver/actions/workflows/ci.yaml)
 [![Go](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-development-orange.svg)](https://github.com/lukaszciukaj/modbusreceiver)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../../LICENSE)
+[![Status](https://img.shields.io/badge/status-development-orange.svg)](https://github.com/otel-industrial/otel-industrial-resources/tree/main/otel-industrial-collector/receiver/modbusreceiver)
 
 Modbus has been the standard protocol for industrial devices — PLCs, sensors, SCADA systems — since 1979, yet operational data from the factory floor rarely makes it into modern observability pipelines. The **modbusreceiver** changes that by extending the OpenTelemetry Collector into industrial environments, turning raw register and coil values into standard OTel metrics with no proprietary gateway or vendor lock-in required.
 
@@ -58,8 +57,8 @@ go install go.opentelemetry.io/collector/cmd/builder@v0.152.0
 ### 1. Clone and build
 
 ```bash
-git clone https://github.com/lukaszciukaj/modbusreceiver.git
-cd modbusreceiver
+git clone https://github.com/otel-industrial/otel-industrial-resources.git
+cd otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver
 make build
 ```
 
@@ -217,7 +216,7 @@ Add this receiver to your own custom collector distribution via `builder-config.
 
 ```yaml
 receivers:
-  - gomod: github.com/lukaszciukaj/modbusreceiver v0.1.0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.1.0
 ```
 
 ## Development
@@ -299,4 +298,4 @@ Contributions are welcome! Here's how to get started:
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](../../../LICENSE).
