@@ -1,0 +1,13 @@
+default:
+all_set:
+  metrics:
+    modbus.coil.value:
+      enabled: true
+    modbus.register.value:
+      enabled: true
+none_set:
+  metrics:
+    modbus.coil.value:
+      enabled: false
+    modbus.register.value:
+      enabled: false
