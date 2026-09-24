@@ -8,8 +8,8 @@ The goal is to make it easy to find existing work on a given protocol before sta
 
 | Protocol | Status | Location |
 |---|---|---|
-| EtherNet/IP | Experimental — implementation pending merge | [PR #5](https://github.com/otel-industrial/otel-industrial-resources/pull/5) (`add-ethernetipreceiver` branch) |
-| [Modbus](./modbusreceiver/README.md) | External project | [lukaszciukaj/modbusreceiver](https://github.com/lukaszciukaj/modbusreceiver) |
+| [EtherNet/IP](./ethernetipreceiver/README.md) | Experimental | [`./ethernetipreceiver`](./ethernetipreceiver) |
+| [Modbus](./modbusreceiver/README.md) | Experimental | [`./modbusreceiver`](./modbusreceiver) |
 | [OPC UA](./opcuareceiver/README.md) | External project (logs only, alpha) | [bruegth/opentelemetry-collector-opcua-receiver](https://github.com/bruegth/opentelemetry-collector-opcua-receiver) |
 | [MQTT / Sparkplug B](./mqttsparkplugreceiver/README.md) | External project | [jmacd/opentelemetry-mqtt-sparkplug](https://github.com/jmacd/opentelemetry-mqtt-sparkplug) |
 
