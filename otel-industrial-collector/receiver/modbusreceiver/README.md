@@ -216,7 +216,7 @@ Add this receiver to your own custom collector distribution via `builder-config.
 
 ```yaml
 receivers:
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.1.0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.0.1
 ```
 
 ## Development
