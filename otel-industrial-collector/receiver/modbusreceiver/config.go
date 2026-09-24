@@ -106,9 +106,6 @@ type Config struct {
 // Validate checks the configuration for required fields and valid values.
 // This is called automatically by the OTel collector after config unmarshalling.
 func (c *Config) Validate() error {
-	fmt.Printf("[modbus] Validate() called: endpoint=%s unit_id=%d registers=%d\n",
-		c.Endpoint, c.UnitID, len(c.Registers))
-
 	if c.Endpoint == "" {
 		return errors.New("endpoint must be set (e.g. \"192.168.1.10:502\")")
 	}
