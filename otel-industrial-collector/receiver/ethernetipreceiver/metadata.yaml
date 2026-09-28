@@ -1,10 +1,14 @@
 type: ethernetip
+display_name: EtherNet/IP Receiver
+description: This receiver polls tags from EtherNet/IP (CIP) devices, such as PLCs, and reports device reachability and tag values as metrics.
+github_project: otel-industrial/otel-industrial-resources
 
 status:
   class: receiver
   stability:
     development: [metrics]
   distributions: []
+  disable_codecov_badge: true
   codeowners:
     active: [lukaszciukaj]
 
@@ -43,6 +47,14 @@ metrics:
     attributes: [ethernetip.tag.name]
 
 tests:
+  goleak:
+    ignore:
+      # The gologix.Server instances started by client_test.go have no clean
+      # shutdown path, so their goroutines outlive the tests.
+      any:
+        - "github.com/danomagnum/gologix.(*Server).Serve"
+        - "github.com/danomagnum/gologix.(*Server).serveTCP"
+        - "github.com/danomagnum/gologix.(*Server).serveUDP"
   config:
     host: "127.0.0.1"
     port: 44818

@@ -1,0 +1,25 @@
+# Only the required settings; everything else uses defaults.
+ethernetip:
+  host: "192.168.1.10"
+  tags:
+    - temperature
+
+# Every setting the receiver exposes, including the inherited scraper
+# controller settings and per-metric/resource-attribute toggles.
+ethernetip/all_settings:
+  host: "plc-line1.example.internal"
+  port: 44818
+  device_name: "line1-plc"
+  collection_interval: 30s
+  initial_delay: 5s
+  timeout: 2s
+  tags:
+    - temperature
+    - pumpstatus
+    - flow_rate
+  metrics:
+    ethernetip.tag.value:
+      enabled: true
+  resource_attributes:
+    ethernetip.device.name:
+      enabled: false
