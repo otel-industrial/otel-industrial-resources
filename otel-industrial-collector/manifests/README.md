@@ -33,7 +33,7 @@ Four minimal, single-protocol manifests plus one full multi-protocol gateway:
 
 | Manifest                        | Target environment                              | Industrial receiver(s)        | Components |
 | ------------------------------- | ----------------------------------------------- | ----------------------------- | ---------- |
-| `modbus-edge-gateway.yaml`      | Modbus TCP/RTU edge (water, HVAC, energy)       | Modbus                        | 8          |
+| `modbus-edge-gateway.yaml`      | Modbus TCP edge (water, HVAC, energy)           | Modbus                        | 8          |
 | `rockwell-ethernetip.yaml`      | Rockwell / Allen-Bradley EtherNet/IP cells      | EtherNet/IP                   | 8          |
 | `opcua-plant-floor.yaml`        | OPC UA plant floor (SCADA, discrete mfg)        | OPC UA (logs-only, alpha)     | 8          |
 | `iiot-sparkplug.yaml`           | MQTT Sparkplug B broker / IIoT                  | Sparkplug                     | 8          |

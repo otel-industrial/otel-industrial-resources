@@ -1,6 +1,6 @@
 # Modbus edge gateway
 #
-# Target: a small edge box on a Modbus TCP/RTU segment (water/wastewater, HVAC,
+# Target: a small edge box on a Modbus TCP segment (water/wastewater, HVAC,
 # building automation, energy metering). Minimal footprint - only what a
 # single-protocol Modbus gateway needs.
 #
