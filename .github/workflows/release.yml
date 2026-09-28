@@ -21,9 +21,30 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
+          cache: false
+      - name: Resolve Go cache dirs
+        id: gocache
+        run: |
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      # Module cache is identical everywhere (shared, no arch). Build cache is
+      # scoped per target arch, since cross-compiled objects differ.
+      - name: Cache Go modules
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.gocache.outputs.mod }}
+          key: gomodcache-${{ hashFiles('otel-industrial-collector/**/go.sum') }}
+          restore-keys: gomodcache-
+      - name: Cache Go build
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.gocache.outputs.build }}
+          key: gocache-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('otel-industrial-collector/**/go.sum') }}
+          restore-keys: gocache-${{ matrix.goos }}-${{ matrix.goarch }}-
       - name: Install builder
         run: |
-          go install go.opentelemetry.io/collector/cmd/builder@v0.160.0
+          bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" \
+            go install go.opentelemetry.io/collector/cmd/builder@v0.160.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Build all collector distributions
         working-directory: otel-industrial-collector/manifests
@@ -31,7 +52,7 @@ jobs:
           CGO_ENABLED: '0'
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: make OCB=builder
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" make OCB=builder
       - name: Package binaries
         working-directory: otel-industrial-collector/manifests
         run: |
