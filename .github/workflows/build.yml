@@ -1,0 +1,88 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'otel-industrial-collector/**'
+      - '.github/workflows/build.yml'
+      - '.github/scripts/retry.sh'
+  pull_request:
+    paths:
+      - 'otel-industrial-collector/**'
+      - '.github/workflows/build.yml'
+      - '.github/scripts/retry.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  # Select which manifests to build. On a PR, build only the manifests whose
+  # yaml changed; a shared input (Makefile, this workflow, retry.sh) rebuilds
+  # all. On push to main, build all. Manifest builds pin their receiver/contrib
+  # deps by version, so in-repo module source changes do not affect them.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      dists: ${{ steps.select.outputs.dists }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Select manifests
+        id: select
+        working-directory: otel-industrial-collector/manifests
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          all() { for f in *.yaml; do basename "$f" .yaml; done | jq -R . | jq -cs .; }
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "dists=$(all)" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --no-tags origin "$BASE_REF"
+          changed="$(git diff --name-only "$(git rev-parse FETCH_HEAD)...HEAD")"
+          if echo "$changed" | grep -qE '^otel-industrial-collector/manifests/Makefile$|^\.github/workflows/build\.yml$|^\.github/scripts/retry\.sh$'; then
+            echo "dists=$(all)" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          sel="$(echo "$changed" | sed -n 's#^otel-industrial-collector/manifests/\([^/]*\)\.yaml$#\1#p' | jq -R . | jq -cs .)"
+          echo "dists=${sel}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: detect
+    if: ${{ needs.detect.outputs.dists != '[]' && needs.detect.outputs.dists != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dist: ${{ fromJSON(needs.detect.outputs.dists) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+          cache: false
+      - name: Resolve Go cache dirs
+        id: gocache
+        run: |
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      # Module cache is identical on every runner, so it carries no OS/arch in
+      # the key and is shared. The build cache holds arch-specific objects, so
+      # it is scoped per OS/arch.
+      - name: Cache Go modules
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.gocache.outputs.mod }}
+          key: gomodcache-${{ hashFiles('otel-industrial-collector/**/go.sum') }}
+          restore-keys: gomodcache-
+      - name: Cache Go build
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.gocache.outputs.build }}
+          key: gocache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('otel-industrial-collector/**/go.sum') }}
+          restore-keys: gocache-${{ runner.os }}-${{ runner.arch }}-
+      - name: Build ${{ matrix.dist }}
+        working-directory: otel-industrial-collector/manifests
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" make ${{ matrix.dist }}
