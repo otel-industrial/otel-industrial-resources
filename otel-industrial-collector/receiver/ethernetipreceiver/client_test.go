@@ -16,8 +16,9 @@ import (
 // on any Accept() error (including "closed network connection"), so Serve()
 // never returns once started. We deliberately leak the server goroutines and
 // listener for the life of the test binary rather than trying to synchronize
-// on an exit that will never happen; see the goleak.IgnoreAnyFunction calls
-// in generated_package_test.go (manually patched — see comment there).
+// on an exit that will never happen; see the tests.goleak.ignore entries in
+// metadata.yaml, which mdatagen turns into goleak.IgnoreAnyFunction calls in
+// generated_package_test.go.
 //
 // Because the ports are fixed, only one such server may run per test binary.
 func startTestServer(t *testing.T, tagData map[string]any) {
