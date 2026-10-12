@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "localhost:502", "Modbus TCP listen address")
+	addr := flag.String("addr", "localhost:5020", "Modbus TCP listen address")
 	flag.Parse()
 
 	serv := mbserver.NewServer()
