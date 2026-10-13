@@ -17,7 +17,7 @@ dist:
   otelcol_version: 0.160.0
 
 receivers:
-  - gomod: github.com/lukaszciukaj/modbusreceiver v0.1.0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.0.1
   - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1
   # Subdirectory / untagged modules pinned via pseudo-version (see per-protocol manifests).
   - gomod: github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua v0.0.0-20260603175247-91d3129184f0
