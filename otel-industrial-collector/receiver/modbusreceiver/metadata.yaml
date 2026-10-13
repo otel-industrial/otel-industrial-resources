@@ -1,4 +1,7 @@
 type: modbus
+display_name: Modbus Receiver
+description: This receiver polls coils, discrete inputs, holding registers and input registers from Modbus TCP devices, such as PLCs, sensors and meters, and reports their values as metrics.
+github_project: otel-industrial/otel-industrial-resources
 scope_name: otelcol/modbusreceiver
 
 status:
@@ -6,8 +9,9 @@ status:
   stability:
     development: [metrics]
   distributions: []
+  disable_codecov_badge: true
   codeowners:
-    active: []
+    active: [lukaszciukaj]
 
 resource_attributes: {}
 
