@@ -1,0 +1,81 @@
+# config.example.yaml
+# Copy this file to config.yaml and adjust for your Modbus device.
+#
+# To test locally with the simulator:
+#   make simulate          # terminal 1
+#   make build && make run # terminal 2
+
+receivers:
+  modbus:
+    # Modbus TCP endpoint — change to your device's IP and port.
+    # Port 502 is the Modbus standard; use a high port (e.g. 5020) for local testing.
+    endpoint: "localhost:5020"
+
+    # Modbus slave/unit ID (1–247). Most devices use 1.
+    unit_id: 1
+
+    # How often to poll the device.
+    polling_interval: 5s
+
+    # Per-request TCP timeout.
+    timeout: 5s
+
+    # List of registers to poll. Adjust addresses, types, and data types
+    # to match your device's register map (usually in the device manual).
+    registers:
+      - address: 0
+        type: holding_register
+        data_type: float32
+        byte_order: ABCD   # Big-endian (most PLCs). Try DCBA, BADC, or CDAB if values look wrong.
+        name: "temperature"
+
+      - address: 2
+        type: holding_register
+        data_type: uint16
+        byte_order: ABCD
+        name: "pressure"
+
+      - address: 3
+        type: holding_register
+        data_type: uint16
+        byte_order: ABCD
+        name: "humidity"
+
+      - address: 4
+        type: holding_register
+        data_type: float32
+        byte_order: ABCD
+        name: "flow_rate"
+
+      - address: 0
+        type: coil
+        data_type: bool
+        name: "pump_status"
+
+      - address: 1
+        type: coil
+        data_type: bool
+        name: "valve_status"
+
+processors:
+  batch:
+
+exporters:
+  debug:
+    verbosity: detailed
+  # Uncomment to export to an OTLP backend (e.g. Prometheus, Grafana, etc.)
+  # otlp:
+  #   endpoint: "http://localhost:4317"
+
+extensions:
+  zpages:
+    endpoint: "localhost:55679"
+
+service:
+  extensions: [zpages]
+  pipelines:
+    metrics:
+      receivers: [modbus]
+      processors: [batch]
+      exporters: [debug]
+      # exporters: [debug, otlp]
