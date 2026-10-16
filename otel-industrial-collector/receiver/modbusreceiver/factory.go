@@ -7,6 +7,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
+
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
 const (
@@ -30,6 +32,8 @@ func createDefaultConfig() component.Config {
 		PollingInterval: 10 * time.Second,
 		Timeout:         5 * time.Second,
 		Registers:       []RegisterDefinition{},
+
+		MetricsBuilderConfig: metadata.NewDefaultMetricsBuilderConfig(),
 	}
 }
 
@@ -40,5 +44,5 @@ func createMetricsReceiver(
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
 	rCfg := cfg.(*Config)
-	return newModbusReceiver(rCfg, consumer, settings.Logger), nil
+	return newModbusReceiver(rCfg, consumer, settings), nil
 }

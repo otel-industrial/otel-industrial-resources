@@ -7,6 +7,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/receiver"
 	"go.uber.org/zap"
 )
 
@@ -22,12 +23,12 @@ type modbusReceiver struct {
 	done   chan struct{}
 }
 
-func newModbusReceiver(cfg *Config, consumer consumer.Metrics, logger *zap.Logger) *modbusReceiver {
+func newModbusReceiver(cfg *Config, consumer consumer.Metrics, settings receiver.Settings) *modbusReceiver {
 	return &modbusReceiver{
 		cfg:      cfg,
 		consumer: consumer,
-		logger:   logger,
-		scraper:  newModbusScraper(cfg, logger),
+		logger:   settings.Logger,
+		scraper:  newModbusScraper(cfg, settings),
 	}
 }
 

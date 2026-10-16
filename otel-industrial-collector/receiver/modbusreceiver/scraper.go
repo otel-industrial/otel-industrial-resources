@@ -13,7 +13,10 @@ import (
 	"github.com/goburrow/modbus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/receiver"
 	"go.uber.org/zap"
+
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
 // errDecode marks errors caused by an unexpected response payload rather than
@@ -40,13 +43,21 @@ type modbusScraper struct {
 	logger *zap.Logger
 	dial   dialFunc
 
+	// mu guards the connection and mb, which accumulates data points
+	// between Emit calls.
 	mu     sync.Mutex
+	mb     *metadata.MetricsBuilder
 	client modbus.Client
 	closer io.Closer
 }
 
-func newModbusScraper(cfg *Config, logger *zap.Logger) *modbusScraper {
-	return &modbusScraper{cfg: cfg, logger: logger, dial: dialTCP}
+func newModbusScraper(cfg *Config, settings receiver.Settings) *modbusScraper {
+	return &modbusScraper{
+		cfg:    cfg,
+		logger: settings.Logger,
+		dial:   dialTCP,
+		mb:     metadata.NewMetricsBuilder(cfg.MetricsBuilderConfig, settings),
+	}
 }
 
 // connectLocked establishes the connection to the Modbus device.
@@ -103,15 +114,10 @@ func (s *modbusScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 		}
 	}
 
-	md := pmetric.NewMetrics()
-	rm := md.ResourceMetrics().AppendEmpty()
-	sm := rm.ScopeMetrics().AppendEmpty()
-	sm.Scope().SetName("otelcol/modbusreceiver")
-
 	now := pcommon.NewTimestampFromTime(time.Now())
 
 	for _, reg := range s.cfg.Registers {
-		err := s.scrapeRegister(sm, now, reg)
+		err := s.scrapeRegister(now, reg)
 		if err == nil {
 			continue
 		}
@@ -130,7 +136,7 @@ func (s *modbusScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 		break
 	}
 
-	return md, nil
+	return s.mb.Emit(), nil
 }
 
 // isTransportError reports whether err means the connection is no longer usable.
@@ -142,21 +148,21 @@ func isTransportError(err error) bool {
 	return !errors.Is(err, errDecode)
 }
 
-func (s *modbusScraper) scrapeRegister(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition) error {
+func (s *modbusScraper) scrapeRegister(now pcommon.Timestamp, reg RegisterDefinition) error {
 	switch reg.Type {
 	case RegisterTypeCoil:
 		raw, err := s.client.ReadCoils(reg.Address, 1)
 		if err != nil {
 			return fmt.Errorf("ReadCoils(%d): %w", reg.Address, err)
 		}
-		s.appendIntMetric(sm, now, reg, "modbus.coil.value", "The value read from a Modbus coil (0 or 1).", bitValue(raw))
+		s.recordCoil(now, reg, raw)
 
 	case RegisterTypeDiscreteInput:
 		raw, err := s.client.ReadDiscreteInputs(reg.Address, 1)
 		if err != nil {
 			return fmt.Errorf("ReadDiscreteInputs(%d): %w", reg.Address, err)
 		}
-		s.appendIntMetric(sm, now, reg, "modbus.coil.value", "The value read from a Modbus discrete input (0 or 1).", bitValue(raw))
+		s.recordCoil(now, reg, raw)
 
 	case RegisterTypeHoldingRegister, RegisterTypeInputRegister:
 		count := reg.registerCount()
@@ -173,7 +179,7 @@ func (s *modbusScraper) scrapeRegister(sm pmetric.ScopeMetrics, now pcommon.Time
 			return fmt.Errorf("ReadRegisters(%d, count=%d): %w", reg.Address, count, err)
 		}
 		raw = reg.ByteOrder.reorder(raw)
-		return s.decodeAndAppend(sm, now, reg, raw)
+		return s.decodeAndRecord(now, reg, raw)
 	}
 
 	return nil
@@ -186,89 +192,54 @@ func bitValue(raw []byte) int64 {
 	return 0
 }
 
-func (s *modbusScraper) decodeAndAppend(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition, raw []byte) error {
-	const metricName = "modbus.register.value"
-	const metricDesc = "The decoded value read from a Modbus register."
+func (s *modbusScraper) recordCoil(now pcommon.Timestamp, reg RegisterDefinition, raw []byte) {
+	s.mb.RecordModbusCoilValueDataPoint(now, bitValue(raw),
+		reg.Name,
+		int64(reg.Address),
+		metadata.MapAttributeModbusRegisterType[string(reg.Type)],
+		int64(s.cfg.UnitID),
+	)
+}
 
+// decodeAndRecord decodes raw register bytes and records them as a
+// modbus.register.value data point. metadata.yaml declares the metric as a
+// double gauge, so every data type is converted to float64; int64 and uint64
+// values beyond 2^53 lose precision.
+func (s *modbusScraper) decodeAndRecord(now pcommon.Timestamp, reg RegisterDefinition, raw []byte) error {
 	need := int(reg.registerCount()) * 2
 	if len(raw) < need {
 		return fmt.Errorf("%w: not enough bytes for %s: got %d, want %d", errDecode, reg.DataType, len(raw), need)
 	}
 
+	var val float64
 	switch reg.DataType {
 	case DataTypeInt16:
-		val := int64(int16(binary.BigEndian.Uint16(raw)))
-		s.appendIntMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(int16(binary.BigEndian.Uint16(raw)))
 	case DataTypeInt32:
-		val := int64(int32(binary.BigEndian.Uint32(raw)))
-		s.appendIntMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(int32(binary.BigEndian.Uint32(raw)))
 	case DataTypeInt64:
-		val := int64(binary.BigEndian.Uint64(raw))
-		s.appendIntMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(int64(binary.BigEndian.Uint64(raw)))
 	case DataTypeUint16:
-		val := float64(binary.BigEndian.Uint16(raw))
-		s.appendDoubleMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(binary.BigEndian.Uint16(raw))
 	case DataTypeUint32:
-		val := float64(binary.BigEndian.Uint32(raw))
-		s.appendDoubleMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(binary.BigEndian.Uint32(raw))
 	case DataTypeUint64:
-		val := float64(binary.BigEndian.Uint64(raw))
-		s.appendDoubleMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(binary.BigEndian.Uint64(raw))
 	case DataTypeFloat32:
-		val := float64(math.Float32frombits(binary.BigEndian.Uint32(raw)))
-		s.appendDoubleMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = float64(math.Float32frombits(binary.BigEndian.Uint32(raw)))
 	case DataTypeFloat64:
-		val := math.Float64frombits(binary.BigEndian.Uint64(raw))
-		s.appendDoubleMetric(sm, now, reg, metricName, metricDesc, val)
-
+		val = math.Float64frombits(binary.BigEndian.Uint64(raw))
 	default:
 		return fmt.Errorf("%w: unsupported data_type %q", errDecode, reg.DataType)
 	}
 
+	s.mb.RecordModbusRegisterValueDataPoint(now, val,
+		metadata.MapAttributeModbusByteOrder[string(reg.ByteOrder)],
+		metadata.MapAttributeModbusDataType[string(reg.DataType)],
+		reg.Name,
+		int64(reg.Address),
+		metadata.MapAttributeModbusRegisterType[string(reg.Type)],
+		int64(s.cfg.UnitID),
+	)
 	return nil
-}
-
-func (s *modbusScraper) appendIntMetric(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition, name, desc string, val int64) {
-	m := sm.Metrics().AppendEmpty()
-	m.SetName(name)
-	m.SetDescription(desc)
-	m.SetUnit("1")
-	dp := m.SetEmptyGauge().DataPoints().AppendEmpty()
-	dp.SetTimestamp(now)
-	dp.SetIntValue(val)
-	setAttributes(dp.Attributes(), reg, s.cfg.UnitID)
-}
-
-func (s *modbusScraper) appendDoubleMetric(sm pmetric.ScopeMetrics, now pcommon.Timestamp, reg RegisterDefinition, name, desc string, val float64) {
-	m := sm.Metrics().AppendEmpty()
-	m.SetName(name)
-	m.SetDescription(desc)
-	m.SetUnit("1")
-	dp := m.SetEmptyGauge().DataPoints().AppendEmpty()
-	dp.SetTimestamp(now)
-	dp.SetDoubleValue(val)
-	setAttributes(dp.Attributes(), reg, s.cfg.UnitID)
-}
-
-// setAttributes sets the data point attributes declared in metadata.yaml.
-// modbus.data_type and modbus.byte_order only apply to register banks;
-// coils and discrete inputs are single bits, so they are omitted there.
-func setAttributes(attrs pcommon.Map, reg RegisterDefinition, unitID int) {
-	attrs.PutInt("modbus.register_address", int64(reg.Address))
-	attrs.PutInt("modbus.unit_id", int64(unitID))
-	attrs.PutStr("modbus.register_type", string(reg.Type))
-	if reg.Type == RegisterTypeHoldingRegister || reg.Type == RegisterTypeInputRegister {
-		attrs.PutStr("modbus.data_type", string(reg.DataType))
-		attrs.PutStr("modbus.byte_order", string(reg.ByteOrder))
-	}
-	if reg.Name != "" {
-		attrs.PutStr("modbus.name", reg.Name)
-	}
 }

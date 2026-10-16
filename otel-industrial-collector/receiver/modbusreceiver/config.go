@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
 // RegisterType represents the Modbus register bank to read from.
@@ -101,6 +103,10 @@ type Config struct {
 	PollingInterval time.Duration        `mapstructure:"polling_interval"`
 	Timeout         time.Duration        `mapstructure:"timeout"`
 	Registers       []RegisterDefinition `mapstructure:"registers"`
+
+	// MetricsBuilderConfig holds the per-metric settings from metadata.yaml,
+	// e.g. metrics.modbus.coil.value.enabled.
+	metadata.MetricsBuilderConfig `mapstructure:",squash"`
 }
 
 // Validate checks the configuration for required fields and valid values.

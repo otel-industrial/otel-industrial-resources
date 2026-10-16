@@ -3,6 +3,10 @@ package modbusreceiver
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/confmap"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -138,4 +142,19 @@ func TestConfigValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConfigUnmarshalMetrics(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	conf := confmap.NewFromStringMap(map[string]any{
+		"endpoint": "192.168.1.10:502",
+		"metrics": map[string]any{
+			"modbus.coil.value": map[string]any{"enabled": false},
+		},
+	})
+	require.NoError(t, conf.Unmarshal(cfg))
+
+	assert.False(t, cfg.Metrics.ModbusCoilValue.Enabled)
+	assert.True(t, cfg.Metrics.ModbusRegisterValue.Enabled, "unset metrics keep their default")
+	assert.Equal(t, "192.168.1.10:502", cfg.Endpoint)
 }
