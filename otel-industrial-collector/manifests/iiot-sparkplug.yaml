@@ -1,7 +1,9 @@
 # MQTT Sparkplug B / IIoT
 #
-# Target: an edge box subscribed to an MQTT broker carrying Sparkplug B, the
-# common IIoT payload spec for edge nodes and devices. Minimal footprint.
+# Target: an edge box that hosts the MQTT broker its Sparkplug B nodes publish
+# to. The receiver runs the broker itself; subscribing to an external broker
+# isn't supported yet. Sparkplug B is the common IIoT payload spec for edge
+# nodes and devices. Minimal footprint.
 #
 # Build: ocb --config iiot-sparkplug.yaml
 dist:

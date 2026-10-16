@@ -58,6 +58,13 @@ The `file` exporter is a store-and-forward path for air-gapped sites with no out
 
 `resourcedetection` is deliberately excluded, even here. A gateway polls remote devices, so it only describes the collector host, not the equipment the telemetry came from. That adds no source identity, and pulls in large cloud-vendor SDKs. Identify the source with the `resource` processor and operator-set attributes (site, line, asset) instead.
 
+## Known receiver limitations
+
+Current behaviors of the pinned upstream receivers, worth knowing before you deploy:
+
+- **Sparkplug** runs its own MQTT broker: the collector is the broker that Sparkplug B nodes publish to. Subscribing to an external broker isn't supported yet. It also flushes on a fixed 30s interval and panics if a flush fails.
+- **OPC UA** aborts collector startup if the server is unreachable. In `industrial-gateway-full` that stops every other protocol too, so one unreachable OPC UA server takes down the whole gateway. It also dials only the first address `localhost` resolves to, so prefer `127.0.0.1` where `::1` would be tried first.
+
 ## Optional components
 
 The minimal manifests are deliberately spare. To add a common component, drop its `gomod` line into the relevant section and rebuild. Add only what the deployment needs, since every addition grows the binary.

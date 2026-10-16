@@ -42,7 +42,7 @@ jobs:
             echo "dists=$(all)" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git fetch --no-tags origin "$BASE_REF"
-          changed="$(git diff --name-only "$(git rev-parse FETCH_HEAD)...HEAD")"
+          changed="$(git diff --name-only --diff-filter=d "$(git rev-parse FETCH_HEAD)...HEAD")"
           if echo "$changed" | grep -qE '^otel-industrial-collector/manifests/Makefile$|^\.github/workflows/build\.yml$|^\.github/scripts/retry\.sh$'; then
             echo "dists=$(all)" >> "$GITHUB_OUTPUT"; exit 0
           fi
