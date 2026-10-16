@@ -14,7 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/receivertest"
+
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
 // fakeDevice is an in-memory Modbus device. It embeds modbus.Client so it
@@ -80,12 +83,16 @@ func okRead(kind RegisterType, _, quantity uint16) ([]byte, error) {
 // newTestScraper returns a scraper wired to dev, plus a counter of dial calls.
 func newTestScraper(cfg *Config, dev *fakeDevice) (*modbusScraper, *int) {
 	dials := 0
-	s := newModbusScraper(cfg, zap.NewNop())
+	s := newModbusScraper(cfg, testSettings())
 	s.dial = func(*Config) (modbus.Client, io.Closer, error) {
 		dials++
 		return dev, dev, nil
 	}
 	return s, &dials
+}
+
+func testSettings() receiver.Settings {
+	return receivertest.NewNopSettings(metadata.Type)
 }
 
 func testConfig(regs ...RegisterDefinition) *Config {
@@ -127,18 +134,17 @@ func TestScrapeDecodesDataTypes(t *testing.T) {
 		dataType  DataType
 		byteOrder ByteOrder
 		raw       []byte
-		wantInt   *int64
-		wantFloat *float64
+		want      float64
 	}{
-		{name: "int16 negative", dataType: DataTypeInt16, raw: []byte{0xFF, 0xFE}, wantInt: ptr(int64(-2))},
-		{name: "uint16", dataType: DataTypeUint16, raw: []byte{0x03, 0xF5}, wantFloat: ptr(1013.0)},
-		{name: "int32", dataType: DataTypeInt32, raw: []byte{0xFF, 0xFF, 0xFF, 0x9C}, wantInt: ptr(int64(-100))},
-		{name: "uint32", dataType: DataTypeUint32, raw: []byte{0x00, 0x01, 0x00, 0x00}, wantFloat: ptr(65536.0)},
-		{name: "int64", dataType: DataTypeInt64, raw: []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, wantInt: ptr(int64(-1))},
-		{name: "uint64", dataType: DataTypeUint64, raw: []byte{0, 0, 0, 0, 0, 0, 0x01, 0x00}, wantFloat: ptr(256.0)},
-		{name: "float32 ABCD", dataType: DataTypeFloat32, raw: []byte{0x41, 0xB4, 0x00, 0x00}, wantFloat: ptr(22.5)},
-		{name: "float32 CDAB", dataType: DataTypeFloat32, byteOrder: ByteOrderCDAB, raw: []byte{0x00, 0x00, 0x41, 0xB4}, wantFloat: ptr(22.5)},
-		{name: "float64", dataType: DataTypeFloat64, raw: float64Bytes(-3.25), wantFloat: ptr(-3.25)},
+		{name: "int16 negative", dataType: DataTypeInt16, raw: []byte{0xFF, 0xFE}, want: -2},
+		{name: "uint16", dataType: DataTypeUint16, raw: []byte{0x03, 0xF5}, want: 1013},
+		{name: "int32", dataType: DataTypeInt32, raw: []byte{0xFF, 0xFF, 0xFF, 0x9C}, want: -100},
+		{name: "uint32", dataType: DataTypeUint32, raw: []byte{0x00, 0x01, 0x00, 0x00}, want: 65536},
+		{name: "int64", dataType: DataTypeInt64, raw: []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, want: -1},
+		{name: "uint64", dataType: DataTypeUint64, raw: []byte{0, 0, 0, 0, 0, 0, 0x01, 0x00}, want: 256},
+		{name: "float32 ABCD", dataType: DataTypeFloat32, raw: []byte{0x41, 0xB4, 0x00, 0x00}, want: 22.5},
+		{name: "float32 CDAB", dataType: DataTypeFloat32, byteOrder: ByteOrderCDAB, raw: []byte{0x00, 0x00, 0x41, 0xB4}, want: 22.5},
+		{name: "float64", dataType: DataTypeFloat64, raw: float64Bytes(-3.25), want: -3.25},
 	}
 
 	for _, tt := range tests {
@@ -160,15 +166,62 @@ func TestScrapeDecodesDataTypes(t *testing.T) {
 			dp, ok := dataPoints(t, md)[7]
 			require.True(t, ok)
 
-			if tt.wantInt != nil {
-				require.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
-				assert.Equal(t, *tt.wantInt, dp.IntValue())
-			} else {
-				require.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
-				assert.InDelta(t, *tt.wantFloat, dp.DoubleValue(), 1e-9)
-			}
+			// metadata.yaml declares modbus.register.value as a double gauge
+			// for every data type.
+			require.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
+			assert.InDelta(t, tt.want, dp.DoubleValue(), 1e-9)
 		})
 	}
+}
+
+// All registers of a kind share one metric, with one data point per register,
+// and the metric metadata comes from metadata.yaml.
+func TestScrapeGroupsDataPointsByMetric(t *testing.T) {
+	cfg := testConfig(
+		RegisterDefinition{Address: 1, Type: RegisterTypeCoil, DataType: DataTypeBool, ByteOrder: ByteOrderABCD},
+		RegisterDefinition{Address: 2, Type: RegisterTypeDiscreteInput, DataType: DataTypeBool, ByteOrder: ByteOrderABCD},
+		holding(3, DataTypeInt16),
+		holding(4, DataTypeUint32),
+		RegisterDefinition{Address: 6, Type: RegisterTypeInputRegister, DataType: DataTypeFloat32, ByteOrder: ByteOrderABCD},
+	)
+	s, _ := newTestScraper(cfg, &fakeDevice{read: okRead})
+
+	md, err := s.scrape(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, md.ResourceMetrics().Len())
+	sm := md.ResourceMetrics().At(0).ScopeMetrics()
+	require.Equal(t, 1, sm.Len())
+	assert.Equal(t, metadata.ScopeName, sm.At(0).Scope().Name())
+
+	got := map[string]pmetric.Metric{}
+	ms := sm.At(0).Metrics()
+	for i := 0; i < ms.Len(); i++ {
+		got[ms.At(i).Name()] = ms.At(i)
+	}
+	require.Len(t, got, 2)
+
+	coil := got["modbus.coil.value"]
+	assert.Equal(t, "The value read from a Modbus coil or discrete input (0 or 1).", coil.Description())
+	assert.Equal(t, 2, coil.Gauge().DataPoints().Len())
+
+	reg := got["modbus.register.value"]
+	assert.Equal(t, "The decoded value read from a Modbus holding or input register.", reg.Description())
+	assert.Equal(t, 3, reg.Gauge().DataPoints().Len())
+}
+
+func TestScrapeRespectsMetricEnabled(t *testing.T) {
+	cfg := testConfig(
+		RegisterDefinition{Address: 1, Type: RegisterTypeCoil, DataType: DataTypeBool, ByteOrder: ByteOrderABCD},
+		holding(2, DataTypeUint16),
+	)
+	cfg.Metrics.ModbusCoilValue.Enabled = false
+	s, _ := newTestScraper(cfg, &fakeDevice{read: okRead})
+
+	md, err := s.scrape(context.Background())
+	require.NoError(t, err)
+	dps := dataPoints(t, md)
+	assert.NotContains(t, dps, int64(1), "disabled modbus.coil.value should not be emitted")
+	assert.Contains(t, dps, int64(2))
 }
 
 func TestScrapeAttributes(t *testing.T) {
@@ -196,8 +249,10 @@ func TestScrapeAttributes(t *testing.T) {
 	name, ok := dps[1].Attributes().Get("modbus.name")
 	require.True(t, ok)
 	assert.Equal(t, "pump", name.Str())
-	_, ok = dps[2].Attributes().Get("modbus.name")
-	assert.False(t, ok, "modbus.name should be omitted when not configured")
+	// The generated builder always sets declared attributes.
+	name, ok = dps[2].Attributes().Get("modbus.name")
+	require.True(t, ok)
+	assert.Empty(t, name.Str())
 
 	// Register bank: all attributes present.
 	attrs := dps[3].Attributes()
@@ -300,7 +355,7 @@ func TestScrapeShortResponseKeepsConnection(t *testing.T) {
 func TestScrapeDialError(t *testing.T) {
 	cfg := testConfig(holding(0, DataTypeUint16))
 	dev := &fakeDevice{read: okRead}
-	s := newModbusScraper(cfg, zap.NewNop())
+	s := newModbusScraper(cfg, testSettings())
 	dialErr := errors.New("connection refused")
 	fail := true
 	s.dial = func(*Config) (modbus.Client, io.Closer, error) {
@@ -353,7 +408,7 @@ func TestReceiverKeepsPollingAfterTransportError(t *testing.T) {
 	}}
 
 	sink := new(consumertest.MetricsSink)
-	r := newModbusReceiver(cfg, sink, zap.NewNop())
+	r := newModbusReceiver(cfg, sink, testSettings())
 	r.scraper.dial = func(*Config) (modbus.Client, io.Closer, error) { return dev, dev, nil }
 
 	require.NoError(t, r.Start(context.Background(), nil))
@@ -361,8 +416,6 @@ func TestReceiverKeepsPollingAfterTransportError(t *testing.T) {
 		"receiver should keep polling and recover after a transport error")
 	require.NoError(t, r.Shutdown(context.Background()))
 }
-
-func ptr[T any](v T) *T { return &v }
 
 func float64Bytes(v float64) []byte {
 	bits := math.Float64bits(v)

@@ -149,24 +149,34 @@ If decoded values look wrong, try a different byte order — consult your device
 
 ## Metrics
 
+Each metric is emitted once per scrape, with one data point per configured register.
+
 ### `modbus.register.value`
 
-Decoded value from a holding or input register. Signed integer types (`int16/32/64`) are emitted as int gauge; unsigned and float types as double gauge.
+Decoded value from a holding or input register, emitted as a double gauge for every data type. `int64` and `uint64` values beyond 2^53 lose precision.
 
 ### `modbus.coil.value`
 
-Binary value (0 or 1) from a coil or discrete input, emitted as int gauge.
+Binary value (0 or 1) from a coil or discrete input, emitted as an int gauge.
 
-Both metrics share these attributes:
+| Attribute                 | Description                                         | `register.value` | `coil.value` |
+|---------------------------|-----------------------------------------------------|:----------------:|:------------:|
+| `modbus.register_address` | Register address                                    | ✓                | ✓            |
+| `modbus.unit_id`          | Modbus unit/slave ID                                | ✓                | ✓            |
+| `modbus.register_type`    | Register bank type                                  | ✓                | ✓            |
+| `modbus.name`             | Name from config; empty string when not set         | ✓                | ✓            |
+| `modbus.data_type`        | Data type used for decoding                         | ✓                |              |
+| `modbus.byte_order`       | Byte order used for decoding                        | ✓                |              |
 
-| Attribute                 | Description                        |
-|---------------------------|------------------------------------|
-| `modbus.register_address` | Register address                   |
-| `modbus.unit_id`          | Modbus unit/slave ID               |
-| `modbus.register_type`    | Register bank type                 |
-| `modbus.data_type`        | Data type used for decoding        |
-| `modbus.byte_order`       | Byte order used for decoding       |
-| `modbus.name`             | Optional name from config          |
+Either metric can be turned off in the receiver config:
+
+```yaml
+receivers:
+  modbus:
+    metrics:
+      modbus.coil.value:
+        enabled: false
+```
 
 Full metric documentation is auto-generated in [documentation.md](documentation.md) by `mdatagen` from [metadata.yaml](metadata.yaml).
 
