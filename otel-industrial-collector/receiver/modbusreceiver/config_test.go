@@ -17,10 +17,9 @@ import (
 func TestConfigValidate(t *testing.T) {
 	validBase := func() *Config {
 		return &Config{
-			Endpoint:        "192.168.1.10:502",
-			UnitID:          1,
-			PollingInterval: 10 * time.Second,
-			Timeout:         5 * time.Second,
+			Endpoint:       "192.168.1.10:502",
+			UnitID:         1,
+			RequestTimeout: 5 * time.Second,
 			Registers: []RegisterDefinition{
 				{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
 			},
@@ -48,13 +47,8 @@ func TestConfigValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "zero polling interval",
-			mutate:  func(c *Config) { c.PollingInterval = 0 },
-			wantErr: true,
-		},
-		{
-			name:    "zero timeout",
-			mutate:  func(c *Config) { c.Timeout = 0 },
+			name:    "zero request_timeout",
+			mutate:  func(c *Config) { c.RequestTimeout = 0 },
 			wantErr: true,
 		},
 		{
@@ -158,8 +152,10 @@ func TestLoadConfig(t *testing.T) {
 
 		assert.Equal(t, "localhost:502", cfg.Endpoint)
 		assert.Equal(t, 1, cfg.UnitID)
-		assert.Equal(t, 10*time.Second, cfg.PollingInterval)
-		assert.Equal(t, 5*time.Second, cfg.Timeout)
+		assert.Equal(t, 10*time.Second, cfg.CollectionInterval)
+		assert.Equal(t, time.Second, cfg.InitialDelay)
+		assert.Equal(t, time.Duration(0), cfg.Timeout)
+		assert.Equal(t, 5*time.Second, cfg.RequestTimeout)
 		// Validate fills in per-register defaults.
 		assert.Equal(t, []RegisterDefinition{
 			{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
@@ -172,8 +168,10 @@ func TestLoadConfig(t *testing.T) {
 
 		assert.Equal(t, "plc-line1.example.internal:502", cfg.Endpoint)
 		assert.Equal(t, 17, cfg.UnitID)
-		assert.Equal(t, 30*time.Second, cfg.PollingInterval)
-		assert.Equal(t, 2*time.Second, cfg.Timeout)
+		assert.Equal(t, 30*time.Second, cfg.CollectionInterval)
+		assert.Equal(t, 5*time.Second, cfg.InitialDelay)
+		assert.Equal(t, 20*time.Second, cfg.Timeout)
+		assert.Equal(t, 2*time.Second, cfg.RequestTimeout)
 		assert.Equal(t, []RegisterDefinition{
 			{Address: 100, Type: RegisterTypeHoldingRegister, DataType: DataTypeFloat32, ByteOrder: ByteOrderCDAB, Name: "temperature"},
 			{Address: 4, Type: RegisterTypeInputRegister, DataType: DataTypeInt16, ByteOrder: ByteOrderABCD, Name: "pressure"},
@@ -196,4 +194,29 @@ func loadConfig(t *testing.T, cm *confmap.Conf, id component.ID) *Config {
 	require.NoError(t, sub.Unmarshal(cfg))
 	require.NoError(t, cfg.Validate())
 	return cfg
+}
+
+func TestConfigUnmarshalControllerSettings(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	conf := confmap.NewFromStringMap(map[string]any{
+		"collection_interval": "30s",
+		"initial_delay":       "2s",
+		"timeout":             "20s",
+		"request_timeout":     "3s",
+	})
+	require.NoError(t, conf.Unmarshal(cfg))
+
+	assert.Equal(t, 30*time.Second, cfg.CollectionInterval)
+	assert.Equal(t, 2*time.Second, cfg.InitialDelay)
+	assert.Equal(t, 20*time.Second, cfg.Timeout)
+	assert.Equal(t, 3*time.Second, cfg.RequestTimeout)
+
+	cfg.CollectionInterval = 0
+	assert.Error(t, cfg.ControllerConfig.Validate(), "collection_interval must be positive")
+}
+
+func TestConfigRejectsPollingInterval(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	conf := confmap.NewFromStringMap(map[string]any{"polling_interval": "5s"})
+	assert.Error(t, conf.Unmarshal(cfg), "the removed polling_interval key should be rejected")
 }
