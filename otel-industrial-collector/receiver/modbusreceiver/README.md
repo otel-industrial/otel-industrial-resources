@@ -157,6 +157,11 @@ Details about the metrics produced by this receiver can be found in
 [metadata.yaml](./metadata.yaml) with further documentation in
 [documentation.md](./documentation.md).
 
+> [!NOTE]
+> The receiver does not use the mdatagen `MetricsBuilder` yet, so the per-metric
+> `enabled` settings described in `documentation.md` are not supported and all
+> metrics are always emitted. Tracked in [#30](https://github.com/otel-industrial/otel-industrial-resources/issues/30).
+
 In summary:
 
 | Metric | Type | Description |
