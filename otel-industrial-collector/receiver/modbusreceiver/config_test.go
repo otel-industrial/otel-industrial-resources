@@ -1,8 +1,17 @@
 package modbusreceiver
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/confmap"
+	"go.opentelemetry.io/collector/confmap/confmaptest"
+
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -138,4 +147,50 @@ func TestConfigValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadConfig(t *testing.T) {
+	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
+	require.NoError(t, err)
+
+	t.Run("defaults", func(t *testing.T) {
+		cfg := loadConfig(t, cm, component.NewID(metadata.Type))
+
+		assert.Equal(t, "localhost:502", cfg.Endpoint)
+		assert.Equal(t, 1, cfg.UnitID)
+		assert.Equal(t, 10*time.Second, cfg.PollingInterval)
+		assert.Equal(t, 5*time.Second, cfg.Timeout)
+		// Validate fills in per-register defaults.
+		assert.Equal(t, []RegisterDefinition{
+			{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
+		}, cfg.Registers)
+	})
+
+	t.Run("all_settings", func(t *testing.T) {
+		cfg := loadConfig(t, cm, component.NewIDWithName(metadata.Type, "all_settings"))
+
+		assert.Equal(t, "plc-line1.example.internal:502", cfg.Endpoint)
+		assert.Equal(t, 17, cfg.UnitID)
+		assert.Equal(t, 30*time.Second, cfg.PollingInterval)
+		assert.Equal(t, 2*time.Second, cfg.Timeout)
+		assert.Equal(t, []RegisterDefinition{
+			{Address: 100, Type: RegisterTypeHoldingRegister, DataType: DataTypeFloat32, ByteOrder: ByteOrderCDAB, Name: "temperature"},
+			{Address: 4, Type: RegisterTypeInputRegister, DataType: DataTypeInt16, ByteOrder: ByteOrderABCD, Name: "pressure"},
+			{Address: 0, Type: RegisterTypeCoil, DataType: DataTypeBool, ByteOrder: ByteOrderABCD, Name: "pump_status"},
+			{Address: 1, Type: RegisterTypeDiscreteInput, DataType: DataTypeBool, ByteOrder: ByteOrderABCD, Name: "valve_open"},
+		}, cfg.Registers)
+	})
+}
+
+// loadConfig unmarshals the named receiver section of cm over the factory
+// defaults and checks that the result passes Validate.
+func loadConfig(t *testing.T, cm *confmap.Conf, id component.ID) *Config {
+	t.Helper()
+
+	cfg := NewFactory().CreateDefaultConfig().(*Config)
+	sub, err := cm.Sub(id.String())
+	require.NoError(t, err)
+	require.NoError(t, sub.Unmarshal(cfg))
+	require.NoError(t, cfg.Validate())
+	return cfg
 }
