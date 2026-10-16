@@ -44,7 +44,7 @@ jobs:
       - name: Install builder
         run: |
           bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" \
-            go install go.opentelemetry.io/collector/cmd/builder@v0.160.0
+            go install go.opentelemetry.io/collector/cmd/builder@v0.163.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Build all collector distributions
         working-directory: otel-industrial-collector/manifests

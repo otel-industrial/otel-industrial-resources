@@ -5,10 +5,10 @@
 #   make clean                  # remove built output directories
 #
 # Override the collector version or link flags on the command line:
-#   make OCB_VERSION=0.160.0     # build against a different collector release
+#   make OCB_VERSION=0.163.0     # build against a different collector release
 #   make LDFLAGS=                # keep symbols (debuggable, unstripped) build
 
-OCB_VERSION ?= 0.160.0
+OCB_VERSION ?= 0.163.0
 OCB         ?= go run go.opentelemetry.io/collector/cmd/builder@v$(OCB_VERSION)
 
 # The builder already strips symbols by default (-s -w); setting it here makes

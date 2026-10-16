@@ -8,7 +8,7 @@ Install OCB and run it against a manifest:
 
 ```sh
 # install the builder (matches the pinned collector version below)
-go install go.opentelemetry.io/collector/cmd/builder@v0.160.0
+go install go.opentelemetry.io/collector/cmd/builder@v0.163.0
 
 # build a distribution
 builder --config modbus-edge-gateway.yaml
@@ -71,16 +71,16 @@ The minimal manifests are deliberately spare. To add a common component, drop it
 
 ```yaml
 # receivers: host self-monitoring
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver v0.160.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver v0.163.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver v0.163.0
 
 # processors: attribute enrichment and filtering
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor v0.160.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.160.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor v0.163.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.163.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.163.0
 
 # extensions: health/liveness endpoint
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.163.0
 ```
 
 `resourcedetection` only helps when the collector runs on the machine that *is* the telemetry source (e.g. host self-monitoring). It is platform-dependent (a no-op where its detectors don't apply) and adds large cloud-vendor SDKs. For remote sources, tag with the `resource` processor instead.
@@ -89,7 +89,7 @@ OCB cannot merge or include one manifest from another. It takes a single `--conf
 
 ## Versions
 
-All manifests pin collector **0.160.0** (stable modules **1.66.0**). Keep the builder version, `otelcol_version`, and the core component versions in step when you bump.
+All manifests pin collector **0.163.0** (stable modules **1.69.0**). Keep the builder version, `otelcol_version`, and the core component versions in step when you bump.
 
 Two receivers are referenced by commit pseudo-version rather than a release tag, because their modules are untagged or tagged in a way Go cannot resolve for their path:
 

@@ -11,7 +11,7 @@ dist:
   name: otelcol-opcua
   description: Minimal OpenTelemetry Collector for OPC UA plant-floor servers
   output_path: ./otelcol-opcua
-  otelcol_version: 0.160.0
+  otelcol_version: 0.163.0
 
 receivers:
   # Module lives in a repo subdirectory with no submodule tag; pinned via
@@ -19,21 +19,21 @@ receivers:
   - gomod: github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua v0.0.0-20260603175247-91d3129184f0
 
 processors:
-  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
-  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.163.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.163.0
 
 exporters:
-  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.160.0
-  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.160.0
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.160.0
-  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.160.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.163.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.163.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.163.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.163.0
 
 extensions:
   # Persistent send-queue: survives collector restarts and buffers telemetry
   # across intermittent uplink outages common in industrial sites.
-  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage v0.163.0
 
 providers:
-  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.66.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.66.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.69.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.69.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.69.0
