@@ -3,15 +3,18 @@ package modbusreceiver
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/confmap"
 )
 
 func TestConfigValidate(t *testing.T) {
 	validBase := func() *Config {
 		return &Config{
-			Endpoint:        "192.168.1.10:502",
-			UnitID:          1,
-			PollingInterval: 10 * time.Second,
-			Timeout:         5 * time.Second,
+			Endpoint:       "192.168.1.10:502",
+			UnitID:         1,
+			RequestTimeout: 5 * time.Second,
 			Registers: []RegisterDefinition{
 				{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
 			},
@@ -39,13 +42,8 @@ func TestConfigValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "zero polling interval",
-			mutate:  func(c *Config) { c.PollingInterval = 0 },
-			wantErr: true,
-		},
-		{
-			name:    "zero timeout",
-			mutate:  func(c *Config) { c.Timeout = 0 },
+			name:    "zero request_timeout",
+			mutate:  func(c *Config) { c.RequestTimeout = 0 },
 			wantErr: true,
 		},
 		{
@@ -138,4 +136,44 @@ func TestConfigValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConfigUnmarshalMetrics(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	conf := confmap.NewFromStringMap(map[string]any{
+		"endpoint": "192.168.1.10:502",
+		"metrics": map[string]any{
+			"modbus.coil.value": map[string]any{"enabled": false},
+		},
+	})
+	require.NoError(t, conf.Unmarshal(cfg))
+
+	assert.False(t, cfg.Metrics.ModbusCoilValue.Enabled)
+	assert.True(t, cfg.Metrics.ModbusRegisterValue.Enabled, "unset metrics keep their default")
+	assert.Equal(t, "192.168.1.10:502", cfg.Endpoint)
+}
+
+func TestConfigUnmarshalControllerSettings(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	conf := confmap.NewFromStringMap(map[string]any{
+		"collection_interval": "30s",
+		"initial_delay":       "2s",
+		"timeout":             "20s",
+		"request_timeout":     "3s",
+	})
+	require.NoError(t, conf.Unmarshal(cfg))
+
+	assert.Equal(t, 30*time.Second, cfg.CollectionInterval)
+	assert.Equal(t, 2*time.Second, cfg.InitialDelay)
+	assert.Equal(t, 20*time.Second, cfg.Timeout)
+	assert.Equal(t, 3*time.Second, cfg.RequestTimeout)
+
+	cfg.CollectionInterval = 0
+	assert.Error(t, cfg.ControllerConfig.Validate(), "collection_interval must be positive")
+}
+
+func TestConfigRejectsPollingInterval(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	conf := confmap.NewFromStringMap(map[string]any{"polling_interval": "5s"})
+	assert.Error(t, conf.Unmarshal(cfg), "the removed polling_interval key should be rejected")
 }

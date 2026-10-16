@@ -23,11 +23,11 @@ func TestCreateDefaultConfig(t *testing.T) {
 	if rCfg.UnitID != 1 {
 		t.Errorf("unexpected default unit_id: %d", rCfg.UnitID)
 	}
-	if rCfg.PollingInterval != 10*time.Second {
-		t.Errorf("unexpected default polling_interval: %v", rCfg.PollingInterval)
+	if rCfg.CollectionInterval != 10*time.Second {
+		t.Errorf("unexpected default collection_interval: %v", rCfg.CollectionInterval)
 	}
-	if rCfg.Timeout != 5*time.Second {
-		t.Errorf("unexpected default timeout: %v", rCfg.Timeout)
+	if rCfg.RequestTimeout != 5*time.Second {
+		t.Errorf("unexpected default request_timeout: %v", rCfg.RequestTimeout)
 	}
 }
 
