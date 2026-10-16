@@ -44,12 +44,12 @@ The number of registers read is derived from it:
 
 | `data_type` | Registers | Reported as |
 |---|---|---|
-| `int16`, `int32`, `int64` | 1, 2, 4 | int gauge |
+| `int16`, `int32`, `int64` | 1, 2, 4 | double gauge |
 | `uint16`, `uint32`, `uint64` | 1, 2, 4 | double gauge |
 | `float32`, `float64` (IEEE 754) | 2, 4 | double gauge |
 | `bool` | - | coils and discrete inputs only, `0` or `1` |
 
-`uint64` values above 2^53 lose precision because they are reported as doubles.
+`int64` and `uint64` values beyond 2^53 lose precision because they are reported as doubles.
 
 ### Byte orders
 
@@ -157,11 +157,6 @@ Details about the metrics produced by this receiver can be found in
 [metadata.yaml](./metadata.yaml) with further documentation in
 [documentation.md](./documentation.md).
 
-> [!NOTE]
-> The receiver does not use the mdatagen `MetricsBuilder` yet, so the per-metric
-> `enabled` settings described in `documentation.md` are not supported and all
-> metrics are always emitted. Tracked in [#30](https://github.com/otel-industrial/otel-industrial-resources/issues/30).
-
 In summary:
 
 | Metric | Type | Description |
@@ -170,9 +165,21 @@ In summary:
 | `modbus.coil.value` | Gauge (int) | `0` or `1` from a coil or discrete input. |
 
 Both metrics carry `modbus.register_address`, `modbus.unit_id` and
-`modbus.register_type`, plus `modbus.name` when `name` is configured.
+`modbus.register_type` and `modbus.name` (an empty string when `name` is not
+configured).
 `modbus.register.value` also carries `modbus.data_type` and
 `modbus.byte_order`.
+
+Each metric is emitted once per scrape, with one data point per register.
+Either metric can be turned off with the standard mdatagen `metrics` setting:
+
+```yaml
+receivers:
+  modbus:
+    metrics:
+      modbus.coil.value:
+        enabled: false
+```
 
 Values are reported with unit `1` because the receiver does not know the
 engineering unit of a register.
