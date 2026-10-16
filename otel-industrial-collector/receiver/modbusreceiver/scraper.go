@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/zap"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
@@ -30,7 +31,7 @@ type dialFunc func(cfg *Config) (modbus.Client, io.Closer, error)
 
 func dialTCP(cfg *Config) (modbus.Client, io.Closer, error) {
 	handler := modbus.NewTCPClientHandler(cfg.Endpoint)
-	handler.Timeout = cfg.Timeout
+	handler.Timeout = cfg.RequestTimeout
 	handler.SlaveId = byte(cfg.UnitID)
 	if err := handler.Connect(); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to Modbus endpoint %s: %w", cfg.Endpoint, err)
@@ -103,8 +104,11 @@ func (s *modbusScraper) shutdown(_ context.Context) error {
 //     only affect that register; the scan continues on the same connection.
 //   - Any other error is treated as a transport failure: the connection is
 //     dropped, the rest of this scan is skipped, and the next scrape reconnects.
-//     Metrics collected before the failure are still returned.
-func (s *modbusScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
+//   - If ctx is done (the controller's timeout), the rest of the scan is skipped.
+//
+// Metrics collected before a failure are still returned, together with a
+// scrapererror.PartialScrapeError counting the registers that were not read.
+func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -116,27 +120,36 @@ func (s *modbusScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 
 	now := pcommon.NewTimestampFromTime(time.Now())
 
-	for _, reg := range s.cfg.Registers {
+	var errs []error
+	failed := 0
+	for i, reg := range s.cfg.Registers {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("scan stopped at register %d: %w", reg.Address, err))
+			failed += len(s.cfg.Registers) - i
+			break
+		}
 		err := s.scrapeRegister(now, reg)
 		if err == nil {
 			continue
 		}
-		s.logger.Warn("Failed to scrape register",
-			zap.Uint16("address", reg.Address),
-			zap.String("type", string(reg.Type)),
-			zap.String("data_type", string(reg.DataType)),
-			zap.Error(err),
-		)
+		errs = append(errs, fmt.Errorf("register %d (%s, %s): %w", reg.Address, reg.Type, reg.DataType, err))
 		if !isTransportError(err) {
+			failed++
 			continue
 		}
+		// This register and every one after it in the scan were not read.
+		failed += len(s.cfg.Registers) - i
 		if cerr := s.disconnectLocked(); cerr != nil {
 			s.logger.Debug("Error closing Modbus connection", zap.Error(cerr))
 		}
 		break
 	}
 
-	return s.mb.Emit(), nil
+	md := s.mb.Emit()
+	if len(errs) > 0 {
+		return md, scrapererror.NewPartialScrapeError(errors.Join(errs...), failed)
+	}
+	return md, nil
 }
 
 // isTransportError reports whether err means the connection is no longer usable.

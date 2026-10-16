@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
+
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
@@ -98,19 +100,25 @@ func (r *RegisterDefinition) registerCount() uint16 {
 
 // Config holds all configuration for the Modbus receiver.
 type Config struct {
-	Endpoint        string               `mapstructure:"endpoint"`
-	UnitID          int                  `mapstructure:"unit_id"`
-	PollingInterval time.Duration        `mapstructure:"polling_interval"`
-	Timeout         time.Duration        `mapstructure:"timeout"`
-	Registers       []RegisterDefinition `mapstructure:"registers"`
+	// ControllerConfig holds the standard scraper settings:
+	// collection_interval, initial_delay and timeout (a deadline for the
+	// whole scrape).
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
 
 	// MetricsBuilderConfig holds the per-metric settings from metadata.yaml,
 	// e.g. metrics.modbus.coil.value.enabled.
 	metadata.MetricsBuilderConfig `mapstructure:",squash"`
+
+	Endpoint string `mapstructure:"endpoint"`
+	UnitID   int    `mapstructure:"unit_id"`
+	// RequestTimeout bounds connecting and each individual Modbus request.
+	RequestTimeout time.Duration        `mapstructure:"request_timeout"`
+	Registers      []RegisterDefinition `mapstructure:"registers"`
 }
 
 // Validate checks the configuration for required fields and valid values.
-// This is called automatically by the OTel collector after config unmarshalling.
+// This is called automatically by the OTel collector after config unmarshalling;
+// the collector also validates the embedded ControllerConfig.
 func (c *Config) Validate() error {
 	if c.Endpoint == "" {
 		return errors.New("endpoint must be set (e.g. \"192.168.1.10:502\")")
@@ -118,11 +126,8 @@ func (c *Config) Validate() error {
 	if c.UnitID <= 0 || c.UnitID > 247 {
 		return fmt.Errorf("unit_id must be between 1 and 247, got %d", c.UnitID)
 	}
-	if c.PollingInterval <= 0 {
-		return errors.New("polling_interval must be a positive duration")
-	}
-	if c.Timeout <= 0 {
-		return errors.New("timeout must be a positive duration")
+	if c.RequestTimeout <= 0 {
+		return errors.New("request_timeout must be a positive duration")
 	}
 	if len(c.Registers) == 0 {
 		return errors.New("at least one register definition must be provided")

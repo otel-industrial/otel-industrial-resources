@@ -103,8 +103,10 @@ receivers:
   modbus:
     endpoint: "192.168.1.10:502"  # Modbus TCP host:port
     unit_id: 1                    # Modbus slave ID (1–247)
-    polling_interval: 10s         # how often to poll
-    timeout: 5s                   # per-request TCP timeout
+    collection_interval: 10s      # how often to poll (default 10s)
+    initial_delay: 1s             # delay before the first poll (default 1s)
+    timeout: 0s                   # deadline for a whole scrape; 0 = none (default)
+    request_timeout: 5s           # connect and per-request Modbus TCP timeout (default 5s)
     registers:
       - address: 0
         type: holding_register
@@ -112,6 +114,10 @@ receivers:
         byte_order: ABCD
         name: "temperature"
 ```
+
+`collection_interval`, `initial_delay` and `timeout` are the standard [scraper controller settings](https://github.com/open-telemetry/opentelemetry-collector/tree/main/scraper/scraperhelper) shared by other scraping receivers. `polling_interval` has been replaced by `collection_interval`, and the per-request timeout that used to be `timeout` is now `request_timeout`.
+
+When some registers fail (a Modbus exception, a short response, or a dropped connection), the data points that were read are still sent and the failures are reported as a partial scrape error, so they show up in the collector's `otelcol_scraper_errored_metric_points` metric.
 
 ### Register types
 
@@ -189,7 +195,6 @@ modbusreceiver/
 ├── config.go                   # Config struct and validation
 ├── doc.go                      # go:generate mdatagen directive
 ├── factory.go                  # OTel ComponentFactory registration
-├── receiver.go                 # Lifecycle management and poll loop
 ├── scraper.go                  # Modbus TCP client, decode, metric emission
 ├── metadata.yaml               # Metric definitions (source of truth)
 ├── documentation.md            # Auto-generated metric docs (from mdatagen)
@@ -263,7 +268,7 @@ Try a different `byte_order`. Most PLCs use `ABCD` but some use `CDAB` or `DCBA`
 Check that the `endpoint` and `unit_id` are correct and the device is reachable. Port 502 requires root on Linux/macOS — use a higher port for local testing.
 
 **Collector exits immediately**
-Check your `config.yaml` is valid YAML and all required fields (`endpoint`, `unit_id`, `polling_interval`, `timeout`, at least one register) are set.
+Check your `config.yaml` is valid YAML and all required fields (`endpoint`, `unit_id`, at least one register) are set.
 
 ## Roadmap
 

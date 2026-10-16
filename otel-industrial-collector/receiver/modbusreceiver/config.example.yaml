@@ -15,10 +15,10 @@ receivers:
     unit_id: 1
 
     # How often to poll the device.
-    polling_interval: 5s
+    collection_interval: 5s
 
-    # Per-request TCP timeout.
-    timeout: 5s
+    # Connect and per-request Modbus TCP timeout.
+    request_timeout: 5s
 
     # List of registers to poll. Adjust addresses, types, and data types
     # to match your device's register map (usually in the device manual).

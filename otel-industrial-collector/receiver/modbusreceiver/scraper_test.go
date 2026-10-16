@@ -12,10 +12,12 @@ import (
 	"github.com/goburrow/modbus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
@@ -289,7 +291,8 @@ func TestScrapeTransportErrorMidScan(t *testing.T) {
 	require.NotPanics(t, func() {
 		var err error
 		md, err = s.scrape(context.Background())
-		require.NoError(t, err)
+		// Registers 1 and 2 were not read.
+		requirePartial(t, err, 2)
 	})
 
 	// Register 0 was read before the failure; the rest of the scan was skipped.
@@ -321,7 +324,7 @@ func TestScrapeModbusExceptionKeepsConnection(t *testing.T) {
 	s, dials := newTestScraper(cfg, dev)
 
 	md, err := s.scrape(context.Background())
-	require.NoError(t, err)
+	requirePartial(t, err, 1)
 	dps := dataPoints(t, md)
 	assert.Contains(t, dps, int64(0))
 	assert.NotContains(t, dps, int64(1))
@@ -330,7 +333,7 @@ func TestScrapeModbusExceptionKeepsConnection(t *testing.T) {
 	assert.NotNil(t, s.client)
 
 	_, err = s.scrape(context.Background())
-	require.NoError(t, err)
+	requirePartial(t, err, 1)
 	assert.Equal(t, 1, *dials, "an exception response must not force a reconnect")
 }
 
@@ -345,7 +348,7 @@ func TestScrapeShortResponseKeepsConnection(t *testing.T) {
 	s, _ := newTestScraper(cfg, dev)
 
 	md, err := s.scrape(context.Background())
-	require.NoError(t, err)
+	requirePartial(t, err, 1)
 	dps := dataPoints(t, md)
 	assert.NotContains(t, dps, int64(0))
 	assert.Contains(t, dps, int64(2))
@@ -390,10 +393,27 @@ func TestScraperShutdownClosesConnection(t *testing.T) {
 	assert.Nil(t, s.client)
 }
 
-// End to end through the receiver: a transport error must not stop polling.
+func TestScrapeStopsWhenContextDone(t *testing.T) {
+	cfg := testConfig(holding(0, DataTypeUint16), holding(1, DataTypeUint16))
+	dev := &fakeDevice{read: okRead}
+	s, _ := newTestScraper(cfg, dev)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	md, err := s.scrape(ctx)
+	requirePartial(t, err, 2)
+	// PartialScrapeError does not unwrap, so check the message.
+	assert.ErrorContains(t, err, context.Canceled.Error())
+	assert.Equal(t, 0, md.DataPointCount())
+	assert.Equal(t, 0, dev.closedCount(), "a timed-out scan should keep the connection")
+}
+
+// End to end through the scraperhelper controller: a transport error must
+// not stop polling.
 func TestReceiverKeepsPollingAfterTransportError(t *testing.T) {
 	cfg := testConfig(holding(0, DataTypeUint16), holding(1, DataTypeUint16))
-	cfg.PollingInterval = 10 * time.Millisecond
+	cfg.CollectionInterval = 10 * time.Millisecond
+	cfg.InitialDelay = 0
 
 	var mu sync.Mutex
 	calls := 0
@@ -408,13 +428,24 @@ func TestReceiverKeepsPollingAfterTransportError(t *testing.T) {
 	}}
 
 	sink := new(consumertest.MetricsSink)
-	r := newModbusReceiver(cfg, sink, testSettings())
-	r.scraper.dial = func(*Config) (modbus.Client, io.Closer, error) { return dev, dev, nil }
+	r, err := newMetricsReceiver(cfg, testSettings(), sink, func(*Config) (modbus.Client, io.Closer, error) {
+		return dev, dev, nil
+	})
+	require.NoError(t, err)
 
-	require.NoError(t, r.Start(context.Background(), nil))
+	require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
 	require.Eventually(t, func() bool { return sink.DataPointCount() >= 2 }, 5*time.Second, 10*time.Millisecond,
 		"receiver should keep polling and recover after a transport error")
 	require.NoError(t, r.Shutdown(context.Background()))
+	assert.GreaterOrEqual(t, dev.closedCount(), 1, "shutdown should close the connection")
+}
+
+func requirePartial(t *testing.T, err error, failed int) {
+	t.Helper()
+	require.Error(t, err)
+	var pe scrapererror.PartialScrapeError
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, failed, pe.Failed)
 }
 
 func float64Bytes(v float64) []byte {
