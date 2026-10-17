@@ -57,14 +57,15 @@ make build && make run
 ## Code generation
 
 `metadata.yaml` is the source of truth for the component's status, metrics,
-attributes and generated tests. After editing it, regenerate with `mdatagen`
-at the same version as the collector dependencies:
+attributes and generated tests. After editing it, regenerate with:
 
 ```bash
-git clone --depth=1 --branch v0.163.0 https://github.com/open-telemetry/opentelemetry-collector.git /tmp/otel-collector-mdatagen-src
-(cd /tmp/otel-collector-mdatagen-src/cmd/mdatagen && go build -o "$(go env GOPATH)/bin/mdatagen" .)
-go generate ./...
+make generate
 ```
+
+This runs the mdatagen version pinned in `otel-industrial-collector/internal/tools/go.mod`
+(matching the collector dependencies), so nothing needs to be installed. CI
+fails if the committed generated files don't match.
 
 This rewrites `internal/metadata/`, `documentation.md`, the
 `generated_*_test.go` files, and the status section at the top of
