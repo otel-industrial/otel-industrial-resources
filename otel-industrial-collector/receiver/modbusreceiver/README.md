@@ -201,14 +201,10 @@ modbusreceiver/
 To regenerate `internal/metadata/` after editing `metadata.yaml`:
 
 ```bash
-# Install mdatagen (requires cloning the collector repo)
-git clone --depth=1 --branch v0.152.0 https://github.com/open-telemetry/opentelemetry-collector.git
-cd opentelemetry-collector/cmd/mdatagen && go build -o ~/go/bin/mdatagen .
-
-# Regenerate
-cd ~/your/modbusreceiver
-go generate ./...
+make generate
 ```
+
+This runs the mdatagen version pinned in `otel-industrial-collector/internal/tools/go.mod`; nothing needs to be installed. CI fails if the committed generated files don't match.
 
 ## Using as a library
 
