@@ -3,7 +3,7 @@
 # Target: an edge box polling EtherNet/IP (CIP) devices - Rockwell/Allen-Bradley
 # PLCs and other CIP-enabled equipment on a control cell. Minimal footprint.
 #
-# Build: ocb --config rockwell-ethernetip.yaml
+# Build: builder --config rockwell-ethernetip.yaml
 dist:
   name: otelcol-ethernetip
   description: Minimal OpenTelemetry Collector for Rockwell/Allen-Bradley EtherNet/IP cells

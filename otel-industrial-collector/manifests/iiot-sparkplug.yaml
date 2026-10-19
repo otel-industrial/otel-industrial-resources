@@ -5,7 +5,7 @@
 # isn't supported yet. Sparkplug B is the common IIoT payload spec for edge
 # nodes and devices. Minimal footprint.
 #
-# Build: ocb --config iiot-sparkplug.yaml
+# Build: builder --config iiot-sparkplug.yaml
 dist:
   name: otelcol-sparkplug
   description: Minimal OpenTelemetry Collector for MQTT Sparkplug B / IIoT

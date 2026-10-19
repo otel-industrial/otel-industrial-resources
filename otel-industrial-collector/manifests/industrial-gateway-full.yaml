@@ -9,7 +9,7 @@
 # left out of the minimal manifests (host self-monitoring, resource enrichment,
 # filtering, health check).
 #
-# Build: ocb --config industrial-gateway-full.yaml
+# Build: builder --config industrial-gateway-full.yaml
 dist:
   name: otelcol-industrial-gateway
   description: Full multi-protocol OpenTelemetry Collector for industrial gateways

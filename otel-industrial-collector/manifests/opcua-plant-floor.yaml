@@ -6,7 +6,7 @@
 # Note: the OPC UA receiver is logs-only and alpha. See the project link in
 # ../receiver/opcuareceiver/README.md.
 #
-# Build: ocb --config opcua-plant-floor.yaml
+# Build: builder --config opcua-plant-floor.yaml
 dist:
   name: otelcol-opcua
   description: Minimal OpenTelemetry Collector for OPC UA plant-floor servers
