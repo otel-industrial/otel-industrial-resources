@@ -27,3 +27,28 @@ func TestBatch(t *testing.T) {
 		})
 	}
 }
+
+// TestBatchDoesNotAlias: the groups must not share the input's backing array, or
+// appending to one group overwrites the next group and the caller's slice.
+func TestBatchDoesNotAlias(t *testing.T) {
+	t.Run("sized groups", func(t *testing.T) {
+		in := []int{1, 2, 3, 4}
+		groups := Batch(in, 2)
+		groups[0] = append(groups[0], 99)
+		if groups[1][0] != 3 {
+			t.Errorf("append to groups[0] overwrote groups[1][0] = %d, want 3", groups[1][0])
+		}
+		if in[2] != 3 {
+			t.Errorf("append to groups[0] overwrote caller slice in[2] = %d, want 3", in[2])
+		}
+	})
+
+	t.Run("single group (size<=0)", func(t *testing.T) {
+		in := []int{1, 2, 3}
+		groups := Batch(in, 0)
+		groups[0] = append(groups[0], 99)
+		if len(in) != 3 || in[len(in)-1] != 3 {
+			t.Errorf("append to the single group mutated the caller slice: %v", in)
+		}
+	})
+}
