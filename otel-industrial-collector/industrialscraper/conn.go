@@ -1,6 +1,10 @@
 package industrialscraper
 
-import "context"
+import (
+	"context"
+	"errors"
+	"sync"
+)
 
 // Conn is one field-device connection, implemented by a receiver over its
 // own client. See README.
@@ -13,8 +17,9 @@ type Conn interface {
 	Close(ctx context.Context) error
 }
 
-// Session adds reconnect-on-failure over a Conn.
+// Session adds reconnect-on-failure over a Conn. Safe for concurrent use.
 type Session struct {
+	mu   sync.Mutex
 	conn Conn
 }
 
@@ -22,15 +27,28 @@ func NewSession(conn Conn) *Session {
 	return &Session{conn: conn}
 }
 
-// EnsureLive pings and, on failure, reconnects once. Non-nil means the device
-// is unreachable this cycle; see README.
+// EnsureLive pings and, on failure, closes the dead connection, reconnects, and
+// re-pings. Closing first prevents leaking the old socket (and the device
+// connection slot it holds). A non-nil result means the device is unreachable
+// this cycle; it wraps both the original ping failure and any reconnect error.
+// See README.
 func (s *Session) EnsureLive(ctx context.Context) error {
-	if err := s.conn.Ping(ctx); err == nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pingErr := s.conn.Ping(ctx)
+	if pingErr == nil {
 		return nil
 	}
-	return s.conn.Connect(ctx)
+	_ = s.conn.Close(ctx)
+	if err := s.conn.Connect(ctx); err != nil {
+		return errors.Join(pingErr, err)
+	}
+	return s.conn.Ping(ctx)
 }
 
 func (s *Session) Close(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.conn.Close(ctx)
 }
