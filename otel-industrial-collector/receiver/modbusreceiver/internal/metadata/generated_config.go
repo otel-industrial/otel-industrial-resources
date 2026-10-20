@@ -3,16 +3,31 @@
 package metadata
 
 import (
+	"fmt"
+
 	"go.opentelemetry.io/collector/confmap"
 )
 
-// MetricConfig provides common config for a particular metric.
-type MetricConfig struct {
+// ModbusCoilValueMetricAttributeKey specifies the key of an attribute for the modbus.coil.value metric.
+type ModbusCoilValueMetricAttributeKey string
+
+const (
+	ModbusCoilValueMetricAttributeKeyModbusName            ModbusCoilValueMetricAttributeKey = "modbus.name"
+	ModbusCoilValueMetricAttributeKeyModbusRegisterAddress ModbusCoilValueMetricAttributeKey = "modbus.register_address"
+	ModbusCoilValueMetricAttributeKeyModbusRegisterType    ModbusCoilValueMetricAttributeKey = "modbus.register_type"
+	ModbusCoilValueMetricAttributeKeyModbusUnitID          ModbusCoilValueMetricAttributeKey = "modbus.unit_id"
+)
+
+// ModbusCoilValueMetricConfig provides config for the modbus.coil.value metric.
+type ModbusCoilValueMetricConfig struct {
 	Enabled          bool `mapstructure:"enabled"`
 	enabledSetByUser bool
+
+	AggregationStrategy string                              `mapstructure:"aggregation_strategy"`
+	EnabledAttributes   []ModbusCoilValueMetricAttributeKey `mapstructure:"attributes"`
 }
 
-func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
+func (ms *ModbusCoilValueMetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
@@ -26,19 +41,94 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	return nil
 }
 
+func (ms *ModbusCoilValueMetricConfig) Validate() error {
+	for _, val := range ms.EnabledAttributes {
+		switch val {
+		case ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID:
+		default:
+			return fmt.Errorf("metric modbus.coil.value doesn't have an attribute %v, valid attributes: [modbus.name, modbus.register_address, modbus.register_type, modbus.unit_id]", val)
+		}
+	}
+
+	switch ms.AggregationStrategy {
+	case AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax:
+	default:
+		return fmt.Errorf("invalid aggregation strategy %q, valid strategies: [%s, %s, %s, %s]", ms.AggregationStrategy, AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax)
+	}
+
+	return nil
+}
+
+// ModbusRegisterValueMetricAttributeKey specifies the key of an attribute for the modbus.register.value metric.
+type ModbusRegisterValueMetricAttributeKey string
+
+const (
+	ModbusRegisterValueMetricAttributeKeyModbusByteOrder       ModbusRegisterValueMetricAttributeKey = "modbus.byte_order"
+	ModbusRegisterValueMetricAttributeKeyModbusDataType        ModbusRegisterValueMetricAttributeKey = "modbus.data_type"
+	ModbusRegisterValueMetricAttributeKeyModbusName            ModbusRegisterValueMetricAttributeKey = "modbus.name"
+	ModbusRegisterValueMetricAttributeKeyModbusRegisterAddress ModbusRegisterValueMetricAttributeKey = "modbus.register_address"
+	ModbusRegisterValueMetricAttributeKeyModbusRegisterType    ModbusRegisterValueMetricAttributeKey = "modbus.register_type"
+	ModbusRegisterValueMetricAttributeKeyModbusUnitID          ModbusRegisterValueMetricAttributeKey = "modbus.unit_id"
+)
+
+// ModbusRegisterValueMetricConfig provides config for the modbus.register.value metric.
+type ModbusRegisterValueMetricConfig struct {
+	Enabled          bool `mapstructure:"enabled"`
+	enabledSetByUser bool
+
+	AggregationStrategy string                                  `mapstructure:"aggregation_strategy"`
+	EnabledAttributes   []ModbusRegisterValueMetricAttributeKey `mapstructure:"attributes"`
+}
+
+func (ms *ModbusRegisterValueMetricConfig) Unmarshal(parser *confmap.Conf) error {
+	if parser == nil {
+		return nil
+	}
+
+	err := parser.Unmarshal(ms)
+	if err != nil {
+		return err
+	}
+
+	ms.enabledSetByUser = parser.IsSet("enabled")
+	return nil
+}
+
+func (ms *ModbusRegisterValueMetricConfig) Validate() error {
+	for _, val := range ms.EnabledAttributes {
+		switch val {
+		case ModbusRegisterValueMetricAttributeKeyModbusByteOrder, ModbusRegisterValueMetricAttributeKeyModbusDataType, ModbusRegisterValueMetricAttributeKeyModbusName, ModbusRegisterValueMetricAttributeKeyModbusRegisterAddress, ModbusRegisterValueMetricAttributeKeyModbusRegisterType, ModbusRegisterValueMetricAttributeKeyModbusUnitID:
+		default:
+			return fmt.Errorf("metric modbus.register.value doesn't have an attribute %v, valid attributes: [modbus.byte_order, modbus.data_type, modbus.name, modbus.register_address, modbus.register_type, modbus.unit_id]", val)
+		}
+	}
+
+	switch ms.AggregationStrategy {
+	case AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax:
+	default:
+		return fmt.Errorf("invalid aggregation strategy %q, valid strategies: [%s, %s, %s, %s]", ms.AggregationStrategy, AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax)
+	}
+
+	return nil
+}
+
 // MetricsConfig provides config for modbus metrics.
 type MetricsConfig struct {
-	ModbusCoilValue     MetricConfig `mapstructure:"modbus.coil.value"`
-	ModbusRegisterValue MetricConfig `mapstructure:"modbus.register.value"`
+	ModbusCoilValue     ModbusCoilValueMetricConfig     `mapstructure:"modbus.coil.value"`
+	ModbusRegisterValue ModbusRegisterValueMetricConfig `mapstructure:"modbus.register.value"`
 }
 
 func DefaultMetricsConfig() MetricsConfig {
 	return MetricsConfig{
-		ModbusCoilValue: MetricConfig{
-			Enabled: true,
+		ModbusCoilValue: ModbusCoilValueMetricConfig{
+			Enabled:             true,
+			AggregationStrategy: AggregationStrategyAvg,
+			EnabledAttributes:   []ModbusCoilValueMetricAttributeKey{ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID},
 		},
-		ModbusRegisterValue: MetricConfig{
-			Enabled: true,
+		ModbusRegisterValue: ModbusRegisterValueMetricConfig{
+			Enabled:             true,
+			AggregationStrategy: AggregationStrategyAvg,
+			EnabledAttributes:   []ModbusRegisterValueMetricAttributeKey{ModbusRegisterValueMetricAttributeKeyModbusByteOrder, ModbusRegisterValueMetricAttributeKeyModbusDataType, ModbusRegisterValueMetricAttributeKeyModbusName, ModbusRegisterValueMetricAttributeKeyModbusRegisterAddress, ModbusRegisterValueMetricAttributeKeyModbusRegisterType, ModbusRegisterValueMetricAttributeKeyModbusUnitID},
 		},
 	}
 }
@@ -52,9 +142,4 @@ func NewDefaultMetricsBuilderConfig() MetricsBuilderConfig {
 	return MetricsBuilderConfig{
 		Metrics: DefaultMetricsConfig(),
 	}
-}
-
-// Deprecated: Use NewDefaultMetricsBuilderConfig.
-func DefaultMetricsBuilderConfig() MetricsBuilderConfig {
-	return NewDefaultMetricsBuilderConfig()
 }

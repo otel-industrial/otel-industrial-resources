@@ -170,7 +170,7 @@ receivers:
   - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1 # use the latest released tag
 ```
 
-This component is built and tested against collector v0.152.0. Use the same
+This component is built and tested against collector v0.163.0. Use the same
 `otelcol_version` in your builder manifest.
 
 To build and run a local test collector, or try the receiver against the

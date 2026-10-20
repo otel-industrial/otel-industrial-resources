@@ -3,21 +3,39 @@
 package metadata
 
 import (
-	"time"
-
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/filter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/xpdata/xhash"
 	"go.opentelemetry.io/collector/receiver"
+	"slices"
+	"time"
 )
+
+const (
+	AggregationStrategySum = "sum"
+	AggregationStrategyAvg = "avg"
+	AggregationStrategyMin = "min"
+	AggregationStrategyMax = "max"
+)
+
+// dataPointKey hashes dp's attributes and timestamps for O(1) dedup lookup.
+func dataPointKey(dp pmetric.NumberDataPoint) uint64 {
+	return xhash.Hash64(
+		xhash.WithMap(dp.Attributes()),
+		xhash.WithValue(pcommon.NewValueInt(int64(dp.StartTimestamp()))),
+		xhash.WithValue(pcommon.NewValueInt(int64(dp.Timestamp()))),
+	)
+}
 
 var MetricsInfo = metricsInfo{
 	EthernetipDeviceUp: metricInfo{
 		Name: "ethernetip.device.up",
 	},
 	EthernetipTagValue: metricInfo{
-		Name: "ethernetip.tag.value",
+		Name:       "ethernetip.tag.value",
+		Attributes: []string{"ethernetip.tag.name"},
 	},
 }
 
@@ -27,13 +45,14 @@ type metricsInfo struct {
 }
 
 type metricInfo struct {
-	Name string
+	Name       string
+	Attributes []string
 }
 
 type metricEthernetipDeviceUp struct {
-	data     pmetric.Metric // data buffer for generated metric.
-	config   MetricConfig   // metric config provided by user.
-	capacity int            // max observed number of data points added to the metric.
+	data     pmetric.Metric                 // data buffer for generated metric.
+	config   EthernetipDeviceUpMetricConfig // metric config provided by user.
+	capacity int                            // max observed number of data points added to the metric.
 }
 
 // init fills ethernetip.device.up metric with initial data.
@@ -70,7 +89,7 @@ func (m *metricEthernetipDeviceUp) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricEthernetipDeviceUp(cfg MetricConfig) metricEthernetipDeviceUp {
+func newMetricEthernetipDeviceUp(cfg EthernetipDeviceUpMetricConfig) metricEthernetipDeviceUp {
 	m := metricEthernetipDeviceUp{config: cfg}
 
 	if cfg.Enabled {
@@ -81,9 +100,11 @@ func newMetricEthernetipDeviceUp(cfg MetricConfig) metricEthernetipDeviceUp {
 }
 
 type metricEthernetipTagValue struct {
-	data     pmetric.Metric // data buffer for generated metric.
-	config   MetricConfig   // metric config provided by user.
-	capacity int            // max observed number of data points added to the metric.
+	data          pmetric.Metric                 // data buffer for generated metric.
+	config        EthernetipTagValueMetricConfig // metric config provided by user.
+	capacity      int                            // max observed number of data points added to the metric.
+	aggDataPoints []float64                      // slice containing number of aggregated datapoints at each index
+	dpIndex       map[uint64]int                 // maps a data point's hash to its index, for O(1) dedup lookup.
 }
 
 // init fills ethernetip.tag.value metric with initial data.
@@ -93,17 +114,49 @@ func (m *metricEthernetipTagValue) init() {
 	m.data.SetUnit("1")
 	m.data.SetEmptyGauge()
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+	m.aggDataPoints = m.aggDataPoints[:0]
+	m.dpIndex = make(map[uint64]int, m.capacity)
 }
 
 func (m *metricEthernetipTagValue) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64, ethernetipTagNameAttributeValue string) {
 	if !m.config.Enabled {
 		return
 	}
-	dp := m.data.Gauge().DataPoints().AppendEmpty()
+
+	dp := pmetric.NewNumberDataPoint()
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
+	if slices.Contains(m.config.EnabledAttributes, EthernetipTagValueMetricAttributeKeyEthernetipTagName) {
+		dp.Attributes().PutStr("ethernetip.tag.name", ethernetipTagNameAttributeValue)
+	}
+
+	var s string
+	key := dataPointKey(dp)
+	dps := m.data.Gauge().DataPoints()
+	if i, ok := m.dpIndex[key]; ok {
+		dpi := dps.At(i)
+		switch s = m.config.AggregationStrategy; s {
+		case AggregationStrategySum, AggregationStrategyAvg:
+			dpi.SetDoubleValue(dpi.DoubleValue() + val)
+			m.aggDataPoints[i] += 1
+			return
+		case AggregationStrategyMin:
+			if dpi.DoubleValue() > val {
+				dpi.SetDoubleValue(val)
+			}
+			return
+		case AggregationStrategyMax:
+			if dpi.DoubleValue() < val {
+				dpi.SetDoubleValue(val)
+			}
+			return
+		}
+	}
+
 	dp.SetDoubleValue(val)
-	dp.Attributes().PutStr("ethernetip.tag.name", ethernetipTagNameAttributeValue)
+	m.aggDataPoints = append(m.aggDataPoints, 1)
+	m.dpIndex[key] = dps.Len()
+	dp.MoveTo(dps.AppendEmpty())
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
@@ -116,13 +169,18 @@ func (m *metricEthernetipTagValue) updateCapacity() {
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
 func (m *metricEthernetipTagValue) emit(metrics pmetric.MetricSlice) {
 	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		if m.config.AggregationStrategy == AggregationStrategyAvg {
+			for i, aggCount := range m.aggDataPoints {
+				m.data.Gauge().DataPoints().At(i).SetDoubleValue(m.data.Gauge().DataPoints().At(i).DoubleValue() / aggCount)
+			}
+		}
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
 		m.init()
 	}
 }
 
-func newMetricEthernetipTagValue(cfg MetricConfig) metricEthernetipTagValue {
+func newMetricEthernetipTagValue(cfg EthernetipTagValueMetricConfig) metricEthernetipTagValue {
 	m := metricEthernetipTagValue{config: cfg}
 
 	if cfg.Enabled {

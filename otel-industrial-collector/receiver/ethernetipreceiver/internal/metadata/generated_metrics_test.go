@@ -19,6 +19,7 @@ const (
 	testDataSetDefault testDataSet = iota
 	testDataSetAll
 	testDataSetNone
+	testDataSetReag
 )
 
 func TestMetricsBuilder(t *testing.T) {
@@ -35,6 +36,11 @@ func TestMetricsBuilder(t *testing.T) {
 			name:        "all_set",
 			metricsSet:  testDataSetAll,
 			resAttrsSet: testDataSetAll,
+		},
+		{
+			name:        "reaggregate_set",
+			metricsSet:  testDataSetReag,
+			resAttrsSet: testDataSetReag,
 		},
 		{
 			name:        "none_set",
@@ -60,26 +66,37 @@ func TestMetricsBuilder(t *testing.T) {
 			settings := receivertest.NewNopSettings(receivertest.NopType)
 			settings.Logger = zap.New(observedZapCore)
 			mb := NewMetricsBuilder(loadMetricsBuilderConfig(t, tt.name), settings, WithStartTime(start))
+			aggMap := make(map[string]string) // contains the aggregation strategies for each metric name
+			aggMap["ethernetip.tag.value"] = mb.metricEthernetipTagValue.config.AggregationStrategy
 
 			expectedWarnings := 0
-			assert.Equal(t, expectedWarnings, observedLogs.Len())
+			if tt.metricsSet != testDataSetReag {
+				assert.Equal(t, expectedWarnings, observedLogs.Len())
+			}
 
 			defaultMetricsCount := 0
 			allMetricsCount := 0
-
 			defaultMetricsCount++
 			allMetricsCount++
 			mb.RecordEthernetipDeviceUpDataPoint(ts, 1)
-
 			defaultMetricsCount++
 			allMetricsCount++
 			mb.RecordEthernetipTagValueDataPoint(ts, 1, "ethernetip.tag.name-val")
+			if tt.name == "reaggregate_set" {
+				mb.RecordEthernetipTagValueDataPoint(ts, 3, "ethernetip.tag.name-val-2")
+				// a different timestamp is a different key: must not merge with the above.
+				mb.RecordEthernetipTagValueDataPoint(ts+1, 3, "ethernetip.tag.name-val-2")
+				assert.Equal(t, 2, mb.metricEthernetipTagValue.data.Gauge().DataPoints().Len())
+			}
 
 			rb := mb.NewResourceBuilder()
 			rb.SetEthernetipDeviceAddress("ethernetip.device.address-val")
 			rb.SetEthernetipDeviceName("ethernetip.device.name-val")
 			res := rb.Emit()
 			metrics := mb.Emit(WithResource(res))
+			if tt.name == "reaggregate_set" {
+				assert.Empty(t, mb.metricEthernetipTagValue.aggDataPoints)
+			}
 
 			if tt.expectEmpty {
 				assert.Equal(t, 0, metrics.ResourceMetrics().Len())
@@ -119,20 +136,47 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
 					assert.Equal(t, int64(1), dp.IntValue())
 				case "ethernetip.tag.value":
-					assert.False(t, validatedMetrics["ethernetip.tag.value"], "Found a duplicate in the metrics slice: ethernetip.tag.value")
-					validatedMetrics["ethernetip.tag.value"] = true
-					assert.Equal(t, pmetric.MetricTypeGauge, mi.Type())
-					assert.Equal(t, 1, mi.Gauge().DataPoints().Len())
-					assert.Equal(t, "The current value of a polled EtherNet/IP tag, as a float.", mi.Description())
-					assert.Equal(t, "1", mi.Unit())
-					dp := mi.Gauge().DataPoints().At(0)
-					assert.Equal(t, start, dp.StartTimestamp())
-					assert.Equal(t, ts, dp.Timestamp())
-					assert.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
-					assert.InDelta(t, float64(1), dp.DoubleValue(), 0.01)
-					ethernetipTagNameAttrVal, ok := dp.Attributes().Get("ethernetip.tag.name")
-					assert.True(t, ok)
-					assert.Equal(t, "ethernetip.tag.name-val", ethernetipTagNameAttrVal.Str())
+					if tt.name != "reaggregate_set" {
+						assert.False(t, validatedMetrics["ethernetip.tag.value"], "Found a duplicate in the metrics slice: ethernetip.tag.value")
+						validatedMetrics["ethernetip.tag.value"] = true
+						assert.Equal(t, pmetric.MetricTypeGauge, mi.Type())
+						assert.Equal(t, 1, mi.Gauge().DataPoints().Len())
+						assert.Equal(t, "The current value of a polled EtherNet/IP tag, as a float.", mi.Description())
+						assert.Equal(t, "1", mi.Unit())
+						dp := mi.Gauge().DataPoints().At(0)
+						assert.Equal(t, start, dp.StartTimestamp())
+						assert.Equal(t, ts, dp.Timestamp())
+						assert.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
+						assert.InDelta(t, float64(1), dp.DoubleValue(), 0.01)
+						ethernetipTagNameAttrVal, ok := dp.Attributes().Get("ethernetip.tag.name")
+						assert.True(t, ok)
+						assert.Equal(t, "ethernetip.tag.name-val", ethernetipTagNameAttrVal.Str())
+					} else {
+						assert.False(t, validatedMetrics["ethernetip.tag.value"], "Found a duplicate in the metrics slice: ethernetip.tag.value")
+						validatedMetrics["ethernetip.tag.value"] = true
+						assert.Equal(t, pmetric.MetricTypeGauge, mi.Type())
+						// 2 points: the merged one above, plus one with a different timestamp that must not have merged with it.
+						assert.Equal(t, 2, mi.Gauge().DataPoints().Len())
+						assert.Equal(t, ts+1, mi.Gauge().DataPoints().At(1).Timestamp())
+						assert.Equal(t, "The current value of a polled EtherNet/IP tag, as a float.", mi.Description())
+						assert.Equal(t, "1", mi.Unit())
+						dp := mi.Gauge().DataPoints().At(0)
+						assert.Equal(t, start, dp.StartTimestamp())
+						assert.Equal(t, ts, dp.Timestamp())
+						assert.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
+						switch aggMap["ethernetip.tag.value"] {
+						case "sum":
+							assert.InDelta(t, float64(4), dp.DoubleValue(), 0.01)
+						case "avg":
+							assert.InDelta(t, float64(2), dp.DoubleValue(), 0.01)
+						case "min":
+							assert.InDelta(t, float64(1), dp.DoubleValue(), 0.01)
+						case "max":
+							assert.InDelta(t, float64(3), dp.DoubleValue(), 0.01)
+						}
+						_, ok := dp.Attributes().Get("ethernetip.tag.name")
+						assert.False(t, ok)
+					}
 				}
 			}
 		})

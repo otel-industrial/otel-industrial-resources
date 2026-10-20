@@ -3,17 +3,19 @@
 package metadata
 
 import (
+	"fmt"
+
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/filter"
 )
 
-// MetricConfig provides common config for a particular metric.
-type MetricConfig struct {
+// EthernetipDeviceUpMetricConfig provides config for the ethernetip.device.up metric.
+type EthernetipDeviceUpMetricConfig struct {
 	Enabled          bool `mapstructure:"enabled"`
 	enabledSetByUser bool
 }
 
-func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
+func (ms *EthernetipDeviceUpMetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
@@ -27,19 +29,69 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	return nil
 }
 
+// EthernetipTagValueMetricAttributeKey specifies the key of an attribute for the ethernetip.tag.value metric.
+type EthernetipTagValueMetricAttributeKey string
+
+const (
+	EthernetipTagValueMetricAttributeKeyEthernetipTagName EthernetipTagValueMetricAttributeKey = "ethernetip.tag.name"
+)
+
+// EthernetipTagValueMetricConfig provides config for the ethernetip.tag.value metric.
+type EthernetipTagValueMetricConfig struct {
+	Enabled          bool `mapstructure:"enabled"`
+	enabledSetByUser bool
+
+	AggregationStrategy string                                 `mapstructure:"aggregation_strategy"`
+	EnabledAttributes   []EthernetipTagValueMetricAttributeKey `mapstructure:"attributes"`
+}
+
+func (ms *EthernetipTagValueMetricConfig) Unmarshal(parser *confmap.Conf) error {
+	if parser == nil {
+		return nil
+	}
+
+	err := parser.Unmarshal(ms)
+	if err != nil {
+		return err
+	}
+
+	ms.enabledSetByUser = parser.IsSet("enabled")
+	return nil
+}
+
+func (ms *EthernetipTagValueMetricConfig) Validate() error {
+	for _, val := range ms.EnabledAttributes {
+		switch val {
+		case EthernetipTagValueMetricAttributeKeyEthernetipTagName:
+		default:
+			return fmt.Errorf("metric ethernetip.tag.value doesn't have an attribute %v, valid attributes: [ethernetip.tag.name]", val)
+		}
+	}
+
+	switch ms.AggregationStrategy {
+	case AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax:
+	default:
+		return fmt.Errorf("invalid aggregation strategy %q, valid strategies: [%s, %s, %s, %s]", ms.AggregationStrategy, AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax)
+	}
+
+	return nil
+}
+
 // MetricsConfig provides config for ethernetip metrics.
 type MetricsConfig struct {
-	EthernetipDeviceUp MetricConfig `mapstructure:"ethernetip.device.up"`
-	EthernetipTagValue MetricConfig `mapstructure:"ethernetip.tag.value"`
+	EthernetipDeviceUp EthernetipDeviceUpMetricConfig `mapstructure:"ethernetip.device.up"`
+	EthernetipTagValue EthernetipTagValueMetricConfig `mapstructure:"ethernetip.tag.value"`
 }
 
 func DefaultMetricsConfig() MetricsConfig {
 	return MetricsConfig{
-		EthernetipDeviceUp: MetricConfig{
+		EthernetipDeviceUp: EthernetipDeviceUpMetricConfig{
 			Enabled: true,
 		},
-		EthernetipTagValue: MetricConfig{
-			Enabled: true,
+		EthernetipTagValue: EthernetipTagValueMetricConfig{
+			Enabled:             true,
+			AggregationStrategy: AggregationStrategyAvg,
+			EnabledAttributes:   []EthernetipTagValueMetricAttributeKey{EthernetipTagValueMetricAttributeKeyEthernetipTagName},
 		},
 	}
 }
@@ -98,9 +150,4 @@ func NewDefaultMetricsBuilderConfig() MetricsBuilderConfig {
 		Metrics:            DefaultMetricsConfig(),
 		ResourceAttributes: DefaultResourceAttributesConfig(),
 	}
-}
-
-// Deprecated: Use NewDefaultMetricsBuilderConfig.
-func DefaultMetricsBuilderConfig() MetricsBuilderConfig {
-	return NewDefaultMetricsBuilderConfig()
 }

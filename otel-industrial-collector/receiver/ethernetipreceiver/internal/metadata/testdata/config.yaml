@@ -5,6 +5,19 @@ all_set:
       enabled: true
     ethernetip.tag.value:
       enabled: true
+      attributes: ["ethernetip.tag.name"]
+  resource_attributes:
+    ethernetip.device.address:
+      enabled: true
+    ethernetip.device.name:
+      enabled: true
+reaggregate_set:
+  metrics:
+    ethernetip.device.up:
+      enabled: true
+    ethernetip.tag.value:
+      enabled: true
+      attributes: []
   resource_attributes:
     ethernetip.device.address:
       enabled: true
@@ -16,6 +29,7 @@ none_set:
       enabled: false
     ethernetip.tag.value:
       enabled: false
+      attributes: ["ethernetip.tag.name"]
   resource_attributes:
     ethernetip.device.address:
       enabled: false
