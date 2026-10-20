@@ -36,7 +36,7 @@ The current value of a polled EtherNet/IP tag, as a float.
 
 ## Resource Attributes
 
-| Name | Description | Values | Enabled | Semantic Convention |
-| ---- | ----------- | ------ | ------- | ------------------- |
-| ethernetip.device.address | The IP address or hostname of the EtherNet/IP device. | Any Str | true | - |
-| ethernetip.device.name | A user-configured name for the device, if provided. | Any Str | true | - |
+| Name | Description | Values | Enabled | Semantic Convention | Stability |
+| ---- | ----------- | ------ | ------- | ------------------- | --------- |
+| ethernetip.device.address | The IP address or hostname of the EtherNet/IP device. | Any Str | true | - | - |
+| ethernetip.device.name | A user-configured name for the device, if provided. | Any Str | true | - | - |

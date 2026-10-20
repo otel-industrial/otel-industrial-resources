@@ -5,18 +5,18 @@ and the roadmap live in [DESIGN.md](./DESIGN.md).
 
 ## Prerequisites
 
-- Go 1.25+
-- [OpenTelemetry Collector Builder](https://opentelemetry.io/docs/collector/custom-collector/) (`ocb`) v0.152.0:
+- Go 1.26+
+- [OpenTelemetry Collector Builder](https://opentelemetry.io/docs/collector/custom-collector/) (`ocb`) v0.163.0:
 
 ```bash
-  go install go.opentelemetry.io/collector/cmd/builder@v0.152.0
+  go install go.opentelemetry.io/collector/cmd/builder@v0.163.0
 ```
 
 - [`golangci-lint`](https://golangci-lint.run/) for `make lint`
 
 > Version alignment: `ocb`, `otelcol_version` in `builder-config.yaml`, and the
 > collector dependencies in `go.mod` must all match. This component currently
-> targets ocb v0.152.0 with collector modules at v1.58.0 / v0.152.0.
+> targets ocb v0.163.0 with collector modules at v1.69.0 / v0.163.0.
 
 ## Make targets
 
@@ -61,7 +61,7 @@ attributes and generated tests. After editing it, regenerate with `mdatagen`
 at the same version as the collector dependencies:
 
 ```bash
-git clone --depth=1 --branch v0.152.0 https://github.com/open-telemetry/opentelemetry-collector.git /tmp/otel-collector-mdatagen-src
+git clone --depth=1 --branch v0.163.0 https://github.com/open-telemetry/opentelemetry-collector.git /tmp/otel-collector-mdatagen-src
 (cd /tmp/otel-collector-mdatagen-src/cmd/mdatagen && go build -o "$(go env GOPATH)/bin/mdatagen" .)
 go generate ./...
 ```

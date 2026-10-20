@@ -26,11 +26,13 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "all_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					EthernetipDeviceUp: MetricConfig{
+					EthernetipDeviceUp: EthernetipDeviceUpMetricConfig{
 						Enabled: true,
 					},
-					EthernetipTagValue: MetricConfig{
-						Enabled: true,
+					EthernetipTagValue: EthernetipTagValueMetricConfig{
+						Enabled:             true,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []EthernetipTagValueMetricAttributeKey{EthernetipTagValueMetricAttributeKeyEthernetipTagName},
 					},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
@@ -43,11 +45,13 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "none_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					EthernetipDeviceUp: MetricConfig{
+					EthernetipDeviceUp: EthernetipDeviceUpMetricConfig{
 						Enabled: false,
 					},
-					EthernetipTagValue: MetricConfig{
-						Enabled: false,
+					EthernetipTagValue: EthernetipTagValueMetricConfig{
+						Enabled:             false,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []EthernetipTagValueMetricAttributeKey{EthernetipTagValueMetricAttributeKeyEthernetipTagName},
 					},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
@@ -60,10 +64,22 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}, ResourceAttributeConfig{}))
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(EthernetipDeviceUpMetricConfig{}, EthernetipTagValueMetricConfig{}, ResourceAttributeConfig{}))
 			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
+}
+
+func TestEthernetipTagValueMetricsConfig_Validate(t *testing.T) {
+	cfg := DefaultMetricsConfig().EthernetipTagValue
+	require.NoError(t, cfg.Validate())
+
+	cfg.EnabledAttributes = []EthernetipTagValueMetricAttributeKey{"invalid"}
+	require.ErrorContains(t, cfg.Validate(), "metric ethernetip.tag.value doesn't have an attribute invalid, valid attributes: [ethernetip.tag.name]")
+
+	cfg = DefaultMetricsConfig().EthernetipTagValue
+	cfg.AggregationStrategy = "invalid"
+	require.ErrorContains(t, cfg.Validate(), "invalid aggregation strategy")
 }
 
 func loadMetricsBuilderConfig(t *testing.T, name string) MetricsBuilderConfig {

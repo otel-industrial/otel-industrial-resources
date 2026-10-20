@@ -3,13 +3,30 @@
 package metadata
 
 import (
-	"time"
-
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/xpdata/xhash"
 	"go.opentelemetry.io/collector/receiver"
+	"slices"
+	"time"
 )
+
+const (
+	AggregationStrategySum = "sum"
+	AggregationStrategyAvg = "avg"
+	AggregationStrategyMin = "min"
+	AggregationStrategyMax = "max"
+)
+
+// dataPointKey hashes dp's attributes and timestamps for O(1) dedup lookup.
+func dataPointKey(dp pmetric.NumberDataPoint) uint64 {
+	return xhash.Hash64(
+		xhash.WithMap(dp.Attributes()),
+		xhash.WithValue(pcommon.NewValueInt(int64(dp.StartTimestamp()))),
+		xhash.WithValue(pcommon.NewValueInt(int64(dp.Timestamp()))),
+	)
+}
 
 // AttributeModbusByteOrder specifies the value modbus.byte_order attribute.
 type AttributeModbusByteOrder int
@@ -135,10 +152,12 @@ var MapAttributeModbusRegisterType = map[string]AttributeModbusRegisterType{
 
 var MetricsInfo = metricsInfo{
 	ModbusCoilValue: metricInfo{
-		Name: "modbus.coil.value",
+		Name:       "modbus.coil.value",
+		Attributes: []string{"modbus.name", "modbus.register_address", "modbus.register_type", "modbus.unit_id"},
 	},
 	ModbusRegisterValue: metricInfo{
-		Name: "modbus.register.value",
+		Name:       "modbus.register.value",
+		Attributes: []string{"modbus.byte_order", "modbus.data_type", "modbus.name", "modbus.register_address", "modbus.register_type", "modbus.unit_id"},
 	},
 }
 
@@ -148,13 +167,16 @@ type metricsInfo struct {
 }
 
 type metricInfo struct {
-	Name string
+	Name       string
+	Attributes []string
 }
 
 type metricModbusCoilValue struct {
-	data     pmetric.Metric // data buffer for generated metric.
-	config   MetricConfig   // metric config provided by user.
-	capacity int            // max observed number of data points added to the metric.
+	data          pmetric.Metric              // data buffer for generated metric.
+	config        ModbusCoilValueMetricConfig // metric config provided by user.
+	capacity      int                         // max observed number of data points added to the metric.
+	aggDataPoints []int64                     // slice containing number of aggregated datapoints at each index
+	dpIndex       map[uint64]int              // maps a data point's hash to its index, for O(1) dedup lookup.
 }
 
 // init fills modbus.coil.value metric with initial data.
@@ -164,20 +186,58 @@ func (m *metricModbusCoilValue) init() {
 	m.data.SetUnit("1")
 	m.data.SetEmptyGauge()
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+	m.aggDataPoints = m.aggDataPoints[:0]
+	m.dpIndex = make(map[uint64]int, m.capacity)
 }
 
 func (m *metricModbusCoilValue) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, modbusNameAttributeValue string, modbusRegisterAddressAttributeValue int64, modbusRegisterTypeAttributeValue string, modbusUnitIDAttributeValue int64) {
 	if !m.config.Enabled {
 		return
 	}
-	dp := m.data.Gauge().DataPoints().AppendEmpty()
+
+	dp := pmetric.NewNumberDataPoint()
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
+	if slices.Contains(m.config.EnabledAttributes, ModbusCoilValueMetricAttributeKeyModbusName) {
+		dp.Attributes().PutStr("modbus.name", modbusNameAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress) {
+		dp.Attributes().PutInt("modbus.register_address", modbusRegisterAddressAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusCoilValueMetricAttributeKeyModbusRegisterType) {
+		dp.Attributes().PutStr("modbus.register_type", modbusRegisterTypeAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusCoilValueMetricAttributeKeyModbusUnitID) {
+		dp.Attributes().PutInt("modbus.unit_id", modbusUnitIDAttributeValue)
+	}
+
+	var s string
+	key := dataPointKey(dp)
+	dps := m.data.Gauge().DataPoints()
+	if i, ok := m.dpIndex[key]; ok {
+		dpi := dps.At(i)
+		switch s = m.config.AggregationStrategy; s {
+		case AggregationStrategySum, AggregationStrategyAvg:
+			dpi.SetIntValue(dpi.IntValue() + val)
+			m.aggDataPoints[i] += 1
+			return
+		case AggregationStrategyMin:
+			if dpi.IntValue() > val {
+				dpi.SetIntValue(val)
+			}
+			return
+		case AggregationStrategyMax:
+			if dpi.IntValue() < val {
+				dpi.SetIntValue(val)
+			}
+			return
+		}
+	}
+
 	dp.SetIntValue(val)
-	dp.Attributes().PutStr("modbus.name", modbusNameAttributeValue)
-	dp.Attributes().PutInt("modbus.register_address", modbusRegisterAddressAttributeValue)
-	dp.Attributes().PutStr("modbus.register_type", modbusRegisterTypeAttributeValue)
-	dp.Attributes().PutInt("modbus.unit_id", modbusUnitIDAttributeValue)
+	m.aggDataPoints = append(m.aggDataPoints, 1)
+	m.dpIndex[key] = dps.Len()
+	dp.MoveTo(dps.AppendEmpty())
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
@@ -190,13 +250,18 @@ func (m *metricModbusCoilValue) updateCapacity() {
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
 func (m *metricModbusCoilValue) emit(metrics pmetric.MetricSlice) {
 	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		if m.config.AggregationStrategy == AggregationStrategyAvg {
+			for i, aggCount := range m.aggDataPoints {
+				m.data.Gauge().DataPoints().At(i).SetIntValue(m.data.Gauge().DataPoints().At(i).IntValue() / aggCount)
+			}
+		}
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
 		m.init()
 	}
 }
 
-func newMetricModbusCoilValue(cfg MetricConfig) metricModbusCoilValue {
+func newMetricModbusCoilValue(cfg ModbusCoilValueMetricConfig) metricModbusCoilValue {
 	m := metricModbusCoilValue{config: cfg}
 
 	if cfg.Enabled {
@@ -207,9 +272,11 @@ func newMetricModbusCoilValue(cfg MetricConfig) metricModbusCoilValue {
 }
 
 type metricModbusRegisterValue struct {
-	data     pmetric.Metric // data buffer for generated metric.
-	config   MetricConfig   // metric config provided by user.
-	capacity int            // max observed number of data points added to the metric.
+	data          pmetric.Metric                  // data buffer for generated metric.
+	config        ModbusRegisterValueMetricConfig // metric config provided by user.
+	capacity      int                             // max observed number of data points added to the metric.
+	aggDataPoints []float64                       // slice containing number of aggregated datapoints at each index
+	dpIndex       map[uint64]int                  // maps a data point's hash to its index, for O(1) dedup lookup.
 }
 
 // init fills modbus.register.value metric with initial data.
@@ -219,22 +286,64 @@ func (m *metricModbusRegisterValue) init() {
 	m.data.SetUnit("1")
 	m.data.SetEmptyGauge()
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+	m.aggDataPoints = m.aggDataPoints[:0]
+	m.dpIndex = make(map[uint64]int, m.capacity)
 }
 
 func (m *metricModbusRegisterValue) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64, modbusByteOrderAttributeValue string, modbusDataTypeAttributeValue string, modbusNameAttributeValue string, modbusRegisterAddressAttributeValue int64, modbusRegisterTypeAttributeValue string, modbusUnitIDAttributeValue int64) {
 	if !m.config.Enabled {
 		return
 	}
-	dp := m.data.Gauge().DataPoints().AppendEmpty()
+
+	dp := pmetric.NewNumberDataPoint()
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
+	if slices.Contains(m.config.EnabledAttributes, ModbusRegisterValueMetricAttributeKeyModbusByteOrder) {
+		dp.Attributes().PutStr("modbus.byte_order", modbusByteOrderAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusRegisterValueMetricAttributeKeyModbusDataType) {
+		dp.Attributes().PutStr("modbus.data_type", modbusDataTypeAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusRegisterValueMetricAttributeKeyModbusName) {
+		dp.Attributes().PutStr("modbus.name", modbusNameAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusRegisterValueMetricAttributeKeyModbusRegisterAddress) {
+		dp.Attributes().PutInt("modbus.register_address", modbusRegisterAddressAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusRegisterValueMetricAttributeKeyModbusRegisterType) {
+		dp.Attributes().PutStr("modbus.register_type", modbusRegisterTypeAttributeValue)
+	}
+	if slices.Contains(m.config.EnabledAttributes, ModbusRegisterValueMetricAttributeKeyModbusUnitID) {
+		dp.Attributes().PutInt("modbus.unit_id", modbusUnitIDAttributeValue)
+	}
+
+	var s string
+	key := dataPointKey(dp)
+	dps := m.data.Gauge().DataPoints()
+	if i, ok := m.dpIndex[key]; ok {
+		dpi := dps.At(i)
+		switch s = m.config.AggregationStrategy; s {
+		case AggregationStrategySum, AggregationStrategyAvg:
+			dpi.SetDoubleValue(dpi.DoubleValue() + val)
+			m.aggDataPoints[i] += 1
+			return
+		case AggregationStrategyMin:
+			if dpi.DoubleValue() > val {
+				dpi.SetDoubleValue(val)
+			}
+			return
+		case AggregationStrategyMax:
+			if dpi.DoubleValue() < val {
+				dpi.SetDoubleValue(val)
+			}
+			return
+		}
+	}
+
 	dp.SetDoubleValue(val)
-	dp.Attributes().PutStr("modbus.byte_order", modbusByteOrderAttributeValue)
-	dp.Attributes().PutStr("modbus.data_type", modbusDataTypeAttributeValue)
-	dp.Attributes().PutStr("modbus.name", modbusNameAttributeValue)
-	dp.Attributes().PutInt("modbus.register_address", modbusRegisterAddressAttributeValue)
-	dp.Attributes().PutStr("modbus.register_type", modbusRegisterTypeAttributeValue)
-	dp.Attributes().PutInt("modbus.unit_id", modbusUnitIDAttributeValue)
+	m.aggDataPoints = append(m.aggDataPoints, 1)
+	m.dpIndex[key] = dps.Len()
+	dp.MoveTo(dps.AppendEmpty())
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
@@ -247,13 +356,18 @@ func (m *metricModbusRegisterValue) updateCapacity() {
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
 func (m *metricModbusRegisterValue) emit(metrics pmetric.MetricSlice) {
 	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		if m.config.AggregationStrategy == AggregationStrategyAvg {
+			for i, aggCount := range m.aggDataPoints {
+				m.data.Gauge().DataPoints().At(i).SetDoubleValue(m.data.Gauge().DataPoints().At(i).DoubleValue() / aggCount)
+			}
+		}
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
 		m.init()
 	}
 }
 
-func newMetricModbusRegisterValue(cfg MetricConfig) metricModbusRegisterValue {
+func newMetricModbusRegisterValue(cfg ModbusRegisterValueMetricConfig) metricModbusRegisterValue {
 	m := metricModbusRegisterValue{config: cfg}
 
 	if cfg.Enabled {

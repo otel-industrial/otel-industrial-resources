@@ -26,11 +26,15 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "all_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					ModbusCoilValue: MetricConfig{
-						Enabled: true,
+					ModbusCoilValue: ModbusCoilValueMetricConfig{
+						Enabled:             true,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []ModbusCoilValueMetricAttributeKey{ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID},
 					},
-					ModbusRegisterValue: MetricConfig{
-						Enabled: true,
+					ModbusRegisterValue: ModbusRegisterValueMetricConfig{
+						Enabled:             true,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []ModbusRegisterValueMetricAttributeKey{ModbusRegisterValueMetricAttributeKeyModbusByteOrder, ModbusRegisterValueMetricAttributeKeyModbusDataType, ModbusRegisterValueMetricAttributeKeyModbusName, ModbusRegisterValueMetricAttributeKeyModbusRegisterAddress, ModbusRegisterValueMetricAttributeKeyModbusRegisterType, ModbusRegisterValueMetricAttributeKeyModbusUnitID},
 					},
 				},
 			},
@@ -39,11 +43,15 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "none_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					ModbusCoilValue: MetricConfig{
-						Enabled: false,
+					ModbusCoilValue: ModbusCoilValueMetricConfig{
+						Enabled:             false,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []ModbusCoilValueMetricAttributeKey{ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID},
 					},
-					ModbusRegisterValue: MetricConfig{
-						Enabled: false,
+					ModbusRegisterValue: ModbusRegisterValueMetricConfig{
+						Enabled:             false,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []ModbusRegisterValueMetricAttributeKey{ModbusRegisterValueMetricAttributeKeyModbusByteOrder, ModbusRegisterValueMetricAttributeKeyModbusDataType, ModbusRegisterValueMetricAttributeKeyModbusName, ModbusRegisterValueMetricAttributeKeyModbusRegisterAddress, ModbusRegisterValueMetricAttributeKeyModbusRegisterType, ModbusRegisterValueMetricAttributeKeyModbusUnitID},
 					},
 				},
 			},
@@ -52,10 +60,33 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}))
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ModbusCoilValueMetricConfig{}, ModbusRegisterValueMetricConfig{}))
 			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
+}
+func TestModbusCoilValueMetricsConfig_Validate(t *testing.T) {
+	cfg := DefaultMetricsConfig().ModbusCoilValue
+	require.NoError(t, cfg.Validate())
+
+	cfg.EnabledAttributes = []ModbusCoilValueMetricAttributeKey{"invalid"}
+	require.ErrorContains(t, cfg.Validate(), "metric modbus.coil.value doesn't have an attribute invalid, valid attributes: [modbus.name, modbus.register_address, modbus.register_type, modbus.unit_id]")
+
+	cfg = DefaultMetricsConfig().ModbusCoilValue
+	cfg.AggregationStrategy = "invalid"
+	require.ErrorContains(t, cfg.Validate(), "invalid aggregation strategy")
+}
+
+func TestModbusRegisterValueMetricsConfig_Validate(t *testing.T) {
+	cfg := DefaultMetricsConfig().ModbusRegisterValue
+	require.NoError(t, cfg.Validate())
+
+	cfg.EnabledAttributes = []ModbusRegisterValueMetricAttributeKey{"invalid"}
+	require.ErrorContains(t, cfg.Validate(), "metric modbus.register.value doesn't have an attribute invalid, valid attributes: [modbus.byte_order, modbus.data_type, modbus.name, modbus.register_address, modbus.register_type, modbus.unit_id]")
+
+	cfg = DefaultMetricsConfig().ModbusRegisterValue
+	cfg.AggregationStrategy = "invalid"
+	require.ErrorContains(t, cfg.Validate(), "invalid aggregation strategy")
 }
 
 func loadMetricsBuilderConfig(t *testing.T, name string) MetricsBuilderConfig {
