@@ -72,9 +72,10 @@ The following settings are optional:
 - `device_name` (no default): A user-friendly name for the device. When set, it
   is reported as the `ethernetip.device.name` resource attribute; otherwise the
   attribute is omitted.
-- `timeout` (default = `5s`): Socket timeout for each request to the device.
-  Note that the collector's scraper controller also reads the `timeout` key as
-  the overall scrape deadline, so an explicit value applies to both.
+- `request_timeout` (default = `5s`): Timeout for connecting and for each
+  request to the device.
+- `timeout` (default = `0s`, no deadline): Deadline for one whole scrape of all
+  tags. Tags not read when it expires are skipped for that scrape.
 - `collection_interval` (default = `1m`): How often the receiver polls the
   device. This value must be a string readable by Golang's
   [time.ParseDuration](https://pkg.go.dev/time#ParseDuration). Valid time
@@ -154,6 +155,10 @@ know the engineering unit of a tag.
   is logged, and no tag values are emitted for that scrape.
 - **Tag read failure:** The tag is logged at `warn` level and skipped, and the
   remaining tags are still read. Tag failures are not reported as scrape errors.
+- **Scrape deadline:** When `timeout` is set and expires mid-scrape, the
+  remaining tags are skipped with a warning, and the values already read are
+  still emitted. A request to a device that stops answering fails after
+  `request_timeout`.
 - **Load on the device:** Tags are read one request at a time. Unsupported tag
   types cost up to three requests per scrape. Keep `collection_interval`
   conservative on production controllers.

@@ -31,8 +31,10 @@ type Config struct {
 	// Tags is the fixed list of PLC tag names to poll.
 	Tags []string `mapstructure:"tags"`
 
-	// Timeout is the per-request timeout for CIP operations.
-	Timeout time.Duration `mapstructure:"timeout"`
+	// RequestTimeout is the timeout for connecting and for each CIP request.
+	// The embedded ControllerConfig owns `timeout`, the deadline for a whole
+	// scrape.
+	RequestTimeout time.Duration `mapstructure:"request_timeout"`
 }
 
 func (cfg *Config) Validate() error {
