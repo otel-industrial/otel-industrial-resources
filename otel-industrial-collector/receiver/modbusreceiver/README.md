@@ -106,7 +106,8 @@ The following settings are optional:
   [time.ParseDuration](https://pkg.go.dev/time#ParseDuration).
 - `initial_delay` (default = `1s`): How long to wait before the first read.
 - `timeout` (default = `0s`, no deadline): Deadline for one whole scrape of all
-  registers. Registers not read when it expires count as failed.
+  registers. Registers not read when it expires count as failed. A request
+  already in flight still runs until it completes or hits `request_timeout`.
 - `request_timeout` (default = `5s`): Timeout for connecting and for each Modbus
   request.
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -376,6 +377,44 @@ func TestScrapeDialError(t *testing.T) {
 	md, err = s.scrape(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, md.DataPointCount())
+}
+
+// dialTCP against a device that accepts the connection but never answers:
+// the read must fail after request_timeout instead of hanging. The kernel
+// completes the handshake from the listen backlog, so no Accept is needed.
+func TestDialTCPAppliesRequestTimeout(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	cfg := testConfig(holding(0, DataTypeUint16))
+	cfg.Endpoint = ln.Addr().String()
+	cfg.RequestTimeout = 200 * time.Millisecond
+
+	client, closer, err := dialTCP(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = closer.Close() })
+
+	start := time.Now()
+	_, err = client.ReadHoldingRegisters(0, 1)
+	elapsed := time.Since(start)
+
+	var netErr net.Error
+	require.ErrorAs(t, err, &netErr)
+	assert.True(t, netErr.Timeout(), "want a timeout error, got %v", err)
+	assert.GreaterOrEqual(t, elapsed, cfg.RequestTimeout)
+	assert.Less(t, elapsed, 2*time.Second, "read should give up after request_timeout")
+}
+
+func TestDialTCPConnectError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	cfg := testConfig(holding(0, DataTypeUint16))
+	cfg.Endpoint = ln.Addr().String()
+	require.NoError(t, ln.Close()) // nothing listens on this port now
+
+	_, _, err = dialTCP(cfg)
+	require.ErrorContains(t, err, "failed to connect to Modbus endpoint "+cfg.Endpoint)
 }
 
 func TestScraperShutdownClosesConnection(t *testing.T) {
