@@ -4,7 +4,7 @@ receivers:
     port: 44818
     device_name: "line1-plc"
     collection_interval: 5s
-    timeout: 5s
+    request_timeout: 5s
     tags:
       - testtag
       - temperature

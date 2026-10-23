@@ -24,7 +24,7 @@ func newScraper(cfg *Config, settings receiver.Settings) *ethernetipScraper {
 		cfg:      cfg,
 		settings: settings,
 		mb:       metadata.NewMetricsBuilder(cfg.MetricsBuilderConfig, settings),
-		client:   newGologixClient(cfg.Host, cfg.Port, cfg.Timeout),
+		client:   newGologixClient(cfg.Host, cfg.Port, cfg.RequestTimeout),
 	}
 }
 
@@ -43,7 +43,7 @@ func (s *ethernetipScraper) shutdown(_ context.Context) error {
 	return nil
 }
 
-func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
+func (s *ethernetipScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	now := pcommon.NewTimestampFromTime(timeNow())
 
 	if err := s.client.Ping(); err != nil {
@@ -60,7 +60,13 @@ func (s *ethernetipScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 
 	s.mb.RecordEthernetipDeviceUpDataPoint(now, 1)
 
-	for _, tagName := range s.cfg.Tags {
+	for i, tagName := range s.cfg.Tags {
+		// The controller cancels ctx when the scrape `timeout` expires.
+		if err := ctx.Err(); err != nil {
+			s.settings.Logger.Warn("scrape deadline reached, skipping remaining tags",
+				zap.Int("skipped", len(s.cfg.Tags)-i), zap.Error(err))
+			break
+		}
 		value, err := s.client.ReadTag(tagName)
 		if err != nil {
 			s.settings.Logger.Warn("failed to read tag, skipping",
