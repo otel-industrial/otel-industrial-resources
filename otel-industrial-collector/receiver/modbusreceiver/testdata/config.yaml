@@ -38,3 +38,7 @@ modbus/all_settings:
     - address: 1
       type: discrete_input
       name: valve_open
+  # Per-metric settings; unlisted metrics keep their defaults.
+  metrics:
+    modbus.coil.value:
+      enabled: false

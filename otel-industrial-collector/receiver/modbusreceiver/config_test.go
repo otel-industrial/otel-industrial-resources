@@ -164,6 +164,7 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, []RegisterDefinition{
 			{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
 		}, cfg.Registers)
+		assert.Equal(t, metadata.DefaultMetricsConfig(), cfg.Metrics)
 	})
 
 	t.Run("all_settings", func(t *testing.T) {
@@ -179,6 +180,8 @@ func TestLoadConfig(t *testing.T) {
 			{Address: 0, Type: RegisterTypeCoil, DataType: DataTypeBool, ByteOrder: ByteOrderABCD, Name: "pump_status"},
 			{Address: 1, Type: RegisterTypeDiscreteInput, DataType: DataTypeBool, ByteOrder: ByteOrderABCD, Name: "valve_open"},
 		}, cfg.Registers)
+		assert.False(t, cfg.Metrics.ModbusCoilValue.Enabled)
+		assert.True(t, cfg.Metrics.ModbusRegisterValue.Enabled, "unset metrics keep their default")
 	})
 }
 

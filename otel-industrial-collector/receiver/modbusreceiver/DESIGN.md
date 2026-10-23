@@ -39,10 +39,7 @@ development workflow lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
 - One request per register; consecutive registers are not batched.
 - One device and unit ID per receiver instance.
 - No scaling or engineering units; raw decoded values are reported with unit `1`.
-- Metrics are built by hand rather than through the mdatagen `MetricsBuilder`,
-  so per-metric enable/disable settings are not available yet
-  ([#30](https://github.com/otel-industrial/otel-industrial-resources/issues/30)).
-- `uint64` values above 2^53 lose precision when reported as doubles.
+- `int64` and `uint64` values beyond 2^53 lose precision when reported as doubles.
 
 ## Roadmap
 
@@ -50,9 +47,6 @@ The items below are follow-up milestones, not commitments with dates. Feedback
 and contributions on any of these are welcome; they are tracked as issues in the
 [Modbus receiver v0.0.2](https://github.com/otel-industrial/otel-industrial-resources/milestone/1) milestone.
 
-- **mdatagen `MetricsBuilder`.** Emit metrics through the generated builder to
-  get per-metric configuration and consistent metadata
-  ([#30](https://github.com/otel-industrial/otel-industrial-resources/issues/30)).
 - **Batched reads.** Group consecutive registers of the same type into one
   request to reduce round-trips per poll.
 - **Scale factor and units per register.** For example raw → °C.
