@@ -44,6 +44,9 @@ func (cfg *Config) Validate() error {
 	if cfg.Port > 65535 {
 		return fmt.Errorf("port %d is not a valid TCP port (must be 0-65535; 0 uses the client default)", cfg.Port)
 	}
+	if cfg.RequestTimeout <= 0 {
+		return errors.New("request_timeout must be a positive duration")
+	}
 	if len(cfg.Tags) == 0 {
 		return errors.New("at least one tag must be specified")
 	}

@@ -22,30 +22,40 @@ func TestConfigValidate(t *testing.T) {
 	}{
 		{
 			name:    "missing host",
-			cfg:     Config{Host: "", Tags: []string{"TagA"}},
+			cfg:     Config{RequestTimeout: 5 * time.Second, Host: "", Tags: []string{"TagA"}},
 			wantErr: "host must be specified",
 		},
 		{
 			name:    "missing tags",
-			cfg:     Config{Host: "127.0.0.1", Tags: nil},
+			cfg:     Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Tags: nil},
 			wantErr: "at least one tag must be specified",
 		},
 		{
 			name: "valid config",
-			cfg:  Config{Host: "127.0.0.1", Tags: []string{"TagA"}},
+			cfg:  Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Tags: []string{"TagA"}},
 		},
 		{
 			name:    "port out of range",
-			cfg:     Config{Host: "127.0.0.1", Port: 70000, Tags: []string{"TagA"}},
+			cfg:     Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Port: 70000, Tags: []string{"TagA"}},
 			wantErr: "is not a valid TCP port",
 		},
 		{
 			name: "valid config with unset port",
-			cfg:  Config{Host: "127.0.0.1", Port: 0, Tags: []string{"TagA"}},
+			cfg:  Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Port: 0, Tags: []string{"TagA"}},
+		},
+		{
+			name:    "zero request_timeout",
+			cfg:     Config{Host: "127.0.0.1", Tags: []string{"TagA"}},
+			wantErr: "request_timeout must be a positive duration",
+		},
+		{
+			name:    "negative request_timeout",
+			cfg:     Config{RequestTimeout: -time.Second, Host: "127.0.0.1", Tags: []string{"TagA"}},
+			wantErr: "request_timeout must be a positive duration",
 		},
 		{
 			name: "valid config with non-default port",
-			cfg:  Config{Host: "127.0.0.1", Port: 44819, Tags: []string{"TagA"}},
+			cfg:  Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Port: 44819, Tags: []string{"TagA"}},
 		},
 	}
 

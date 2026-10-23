@@ -73,7 +73,7 @@ The following settings are optional:
   is reported as the `ethernetip.device.name` resource attribute; otherwise the
   attribute is omitted.
 - `request_timeout` (default = `5s`): Timeout for connecting and for each
-  request to the device.
+  request to the device. Must be positive.
 - `timeout` (default = `0s`, no deadline): Deadline for one whole scrape of all
   tags. Tags not read when it expires are skipped for that scrape.
 - `collection_interval` (default = `1m`): How often the receiver polls the
@@ -158,7 +158,12 @@ know the engineering unit of a tag.
 - **Scrape deadline:** When `timeout` is set and expires mid-scrape, the
   remaining tags are skipped with a warning, and the values already read are
   still emitted. A request to a device that stops answering fails after
-  `request_timeout`.
+  `request_timeout`. The deadline is checked between tags, so a tag read
+  already in flight is not interrupted. Against a device that stops answering,
+  one tag read can take up to about four times `request_timeout` (the client
+  tries up to three data types and reconnects between them), so in the worst
+  case a scrape takes `timeout` plus that. Without a `timeout`, every remaining
+  tag in the scrape fails the same way, so set one when reading many tags.
 - **Load on the device:** Tags are read one request at a time. Unsupported tag
   types cost up to three requests per scrape. Keep `collection_interval`
   conservative on production controllers.
