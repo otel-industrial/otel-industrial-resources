@@ -12,9 +12,13 @@ modbus/all_settings:
   # Modbus unit (slave) ID, 1-247. Selects the device behind a gateway.
   unit_id: 17
   # How often all registers are polled.
-  polling_interval: 30s
-  # Timeout for connecting and for each request.
-  timeout: 2s
+  collection_interval: 30s
+  # Delay before the first poll.
+  initial_delay: 5s
+  # Deadline for one whole scrape of all registers.
+  timeout: 20s
+  # Timeout for connecting and for each Modbus request.
+  request_timeout: 2s
   registers:
     # Holding register (FC03) decoded as a 32-bit float from two registers.
     - address: 100
