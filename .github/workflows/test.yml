@@ -1,0 +1,36 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+      # Multi-module repo: test/vet/fmt every module. `go test ./...` does not
+      # cross module boundaries, and `find -execdir` hides a failing command's
+      # exit code, so loop explicitly and fail if any module fails.
+      - name: Test all Go modules
+        run: |
+          set -uo pipefail
+          fail=0
+          while IFS= read -r mod; do
+            dir=$(dirname "$mod")
+            echo "== $dir =="
+            (
+              cd "$dir"
+              go vet ./... &&
+              { test -z "$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; false; }; } &&
+              go test ./...
+            ) || fail=1
+          done < <(find . -name go.mod -not -path '*/vendor/*')
+          exit $fail
