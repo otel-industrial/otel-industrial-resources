@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
@@ -102,17 +104,23 @@ func TestScrapeOneTagFailsOthersSucceed(t *testing.T) {
 	s := newTestScraper(t, client, []string{"TagA", "TagB"})
 
 	metrics, err := s.scrape(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
+	requirePartial(t, err, 1)
+	assert.ErrorContains(t, err, `tag "TagB": tag not found`)
+	assert.Equal(t, []float64{1.5}, gaugePoints(metrics, "ethernetip.tag.value"))
+	assert.Equal(t, []float64{1}, gaugePoints(metrics, "ethernetip.device.up"),
+		"device.up means the device answered, so a failed tag leaves it at 1")
 }
 
 func TestScrapeDeviceDownSkipsTags(t *testing.T) {
 	client := &fakeCIPClient{connectErr: errors.New("connection refused")}
-	s := newTestScraper(t, client, []string{"TagA"})
+	s := newTestScraper(t, client, []string{"TagA", "TagB"})
 
 	metrics, err := s.scrape(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
+	requirePartial(t, err, 2)
+	assert.ErrorContains(t, err, "device unreachable: connection refused")
+	// A partial (not plain) error makes the controller still emit device.up = 0.
+	assert.Equal(t, []float64{0}, gaugePoints(metrics, "ethernetip.device.up"))
+	assert.Empty(t, gaugePoints(metrics, "ethernetip.tag.value"))
 	assert.False(t, client.connected)
 }
 
@@ -124,7 +132,7 @@ func TestScrapeDetectsMidRunDrop(t *testing.T) {
 	client.connectErr = errors.New("connection refused")
 
 	metrics, err := s.scrape(context.Background())
-	require.NoError(t, err)
+	requirePartial(t, err, 1)
 	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
 	assert.False(t, client.connected)
 }
@@ -145,17 +153,36 @@ func TestScrapeStopsAtDeadline(t *testing.T) {
 	s := newTestScraper(t, client, []string{"TagA", "TagB", "TagC"})
 
 	metrics, err := s.scrape(ctx)
-	require.NoError(t, err)
+	requirePartial(t, err, 2)
+	// PartialScrapeError does not unwrap, so check the message.
+	assert.ErrorContains(t, err, `scrape stopped before tag "TagB": `+context.Canceled.Error())
 	assert.Equal(t, []string{"TagA"}, read)
+	assert.Equal(t, []float64{1}, gaugePoints(metrics, "ethernetip.tag.value"),
+		"values read before the deadline are still emitted")
+	assert.Equal(t, []float64{1}, gaugePoints(metrics, "ethernetip.device.up"))
+}
 
-	var tagPoints int
-	ms := metrics.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
-	for i := 0; i < ms.Len(); i++ {
-		if ms.At(i).Name() == "ethernetip.tag.value" {
-			tagPoints = ms.At(i).Gauge().DataPoints().Len()
-		}
+func TestScrapeCountsEveryFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := &fakeCIPClient{
+		connected:  true,
+		readValues: map[string]float64{"TagA": 1},
+		readErrs:   map[string]error{"TagB": errors.New("unsupported type")},
+		onRead: func(tagName string) {
+			if tagName == "TagB" {
+				cancel()
+			}
+		},
 	}
-	assert.Equal(t, 1, tagPoints, "values read before the deadline are still emitted")
+	s := newTestScraper(t, client, []string{"TagA", "TagB", "TagC", "TagD"})
+
+	// TagB fails, then the deadline skips TagC and TagD.
+	_, err := s.scrape(ctx)
+	requirePartial(t, err, 3)
+	assert.ErrorContains(t, err, `tag "TagB": unsupported type`)
+	assert.ErrorContains(t, err, `scrape stopped before tag "TagC"`)
 }
 
 func TestNewScraperUsesRequestTimeout(t *testing.T) {
@@ -198,4 +225,40 @@ func TestEmitOmitsDeviceNameWhenNotConfigured(t *testing.T) {
 	rm := metrics.ResourceMetrics().At(0)
 	_, ok := rm.Resource().Attributes().Get("ethernetip.device.name")
 	assert.False(t, ok)
+}
+
+func requirePartial(t *testing.T, err error, failed int) {
+	t.Helper()
+	require.Error(t, err)
+	var pe scrapererror.PartialScrapeError
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, failed, pe.Failed)
+}
+
+// gaugePoints returns the double values of the named gauge, or nil if the
+// metric is absent.
+func gaugePoints(md pmetric.Metrics, name string) []float64 {
+	var out []float64
+	rms := md.ResourceMetrics()
+	for i := 0; i < rms.Len(); i++ {
+		sms := rms.At(i).ScopeMetrics()
+		for j := 0; j < sms.Len(); j++ {
+			ms := sms.At(j).Metrics()
+			for k := 0; k < ms.Len(); k++ {
+				if ms.At(k).Name() != name {
+					continue
+				}
+				dps := ms.At(k).Gauge().DataPoints()
+				for l := 0; l < dps.Len(); l++ {
+					dp := dps.At(l)
+					if dp.ValueType() == pmetric.NumberDataPointValueTypeInt {
+						out = append(out, float64(dp.IntValue()))
+					} else {
+						out = append(out, dp.DoubleValue())
+					}
+				}
+			}
+		}
+	}
+	return out
 }
