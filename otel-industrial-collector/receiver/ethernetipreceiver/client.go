@@ -60,6 +60,12 @@ func (c *gologixClient) Disconnect() error {
 // A cached "connected" flag can go stale if the socket drops between
 // scrapes, so this performs a real round-trip on every call instead.
 func (c *gologixClient) Ping() error {
+	// Unlike Read, gologix's ListIdentity writes to the socket without
+	// checking that one exists, so it panics after a failed Connect (#54).
+	if !c.client.Connected() {
+		c.connected = false
+		return fmt.Errorf("pinging %s: not connected", c.endpoint)
+	}
 	if _, err := c.client.ListIdentity(); err != nil {
 		c.connected = false
 		return fmt.Errorf("pinging %s: %w", c.endpoint, err)

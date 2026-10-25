@@ -1,11 +1,17 @@
 package ethernetipreceiver
 
 import (
+	"context"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/danomagnum/gologix"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/receiver/receivertest"
+
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
 // startTestServer starts a gologix CIP server on the fixed EtherNet/IP ports
@@ -126,4 +132,48 @@ func TestClientAgainstRealServer(t *testing.T) {
 		client := newGologixClient("127.0.0.1:44818", 44818, 2*time.Second)
 		require.Error(t, client.Connect())
 	})
+}
+
+// closedPort returns a local TCP port with nothing listening on it.
+func closedPort(t *testing.T) uint {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+	require.NoError(t, ln.Close())
+	return uint(port)
+}
+
+// Regression for #54: after a failed Connect, gologix has no socket, and
+// calling ListIdentity on it panicked.
+func TestClientUnreachableDoesNotPanic(t *testing.T) {
+	c := newGologixClient("127.0.0.1", closedPort(t), 200*time.Millisecond)
+	require.Error(t, c.Connect())
+
+	require.NotPanics(t, func() { assert.ErrorContains(t, c.Ping(), "not connected") })
+	require.NotPanics(t, func() {
+		_, err := c.ReadTag("anytag")
+		assert.Error(t, err)
+	})
+	require.NotPanics(t, func() { _ = c.Disconnect() })
+}
+
+// The same crash through the scraper, with the real client: start while the
+// device is down, then keep scraping.
+func TestScrapeWithUnreachableDeviceDoesNotPanic(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	cfg.Host = "127.0.0.1"
+	cfg.Port = closedPort(t)
+	cfg.RequestTimeout = 200 * time.Millisecond
+	cfg.Tags = []string{"TagA"}
+
+	s := newScraper(cfg, receivertest.NewNopSettings(metadata.Type))
+	require.NoError(t, s.start(context.Background(), nil))
+	for range 2 {
+		require.NotPanics(t, func() {
+			md, _ := s.scrape(context.Background())
+			assert.Equal(t, 1, md.DataPointCount(), "only ethernetip.device.up")
+		})
+	}
+	require.NoError(t, s.shutdown(context.Background()))
 }
