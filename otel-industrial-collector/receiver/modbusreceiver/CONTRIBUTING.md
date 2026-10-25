@@ -78,7 +78,6 @@ modbusreceiver/
 ├── config.go                # Config struct, register definitions and validation
 ├── config_test.go           # Validate() tests and testdata/config.yaml loading tests
 ├── factory.go               # Component factory and default config
-├── receiver.go              # Lifecycle and poll loop
 ├── scraper.go               # Modbus TCP client, decoding and metric emission
 ├── scraper_test.go          # Scraper and receiver tests with a fake device
 ├── metadata.yaml            # mdatagen source of truth

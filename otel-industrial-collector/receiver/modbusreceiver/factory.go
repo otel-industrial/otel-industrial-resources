@@ -7,6 +7,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
@@ -26,14 +28,16 @@ func NewFactory() receiver.Factory {
 }
 
 func createDefaultConfig() component.Config {
-	return &Config{
-		Endpoint:        "localhost:502",
-		UnitID:          1,
-		PollingInterval: 10 * time.Second,
-		Timeout:         5 * time.Second,
-		Registers:       []RegisterDefinition{},
+	cc := scraperhelper.NewDefaultControllerConfig()
+	cc.CollectionInterval = 10 * time.Second
 
+	return &Config{
+		ControllerConfig:     cc,
 		MetricsBuilderConfig: metadata.NewDefaultMetricsBuilderConfig(),
+		Endpoint:             "localhost:502",
+		UnitID:               1,
+		RequestTimeout:       5 * time.Second,
+		Registers:            []RegisterDefinition{},
 	}
 }
 
@@ -43,6 +47,20 @@ func createMetricsReceiver(
 	cfg component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
-	rCfg := cfg.(*Config)
-	return newModbusReceiver(rCfg, consumer, settings), nil
+	return newMetricsReceiver(cfg.(*Config), settings, consumer, dialTCP)
+}
+
+// newMetricsReceiver wires the scraper into a scraperhelper controller.
+// The connection is opened lazily on the first scrape, so Start returns
+// quickly. dial is a parameter so tests can substitute a fake device.
+func newMetricsReceiver(cfg *Config, settings receiver.Settings, consumer consumer.Metrics, dial dialFunc) (receiver.Metrics, error) {
+	s := newModbusScraper(cfg, settings)
+	s.dial = dial
+
+	sc, err := scraper.NewMetrics(s.scrape, scraper.WithShutdown(s.shutdown))
+	if err != nil {
+		return nil, err
+	}
+	return scraperhelper.NewMetricsController(&cfg.ControllerConfig, settings, consumer,
+		scraperhelper.AddMetricsScraper(metadata.Type, sc))
 }
