@@ -22,30 +22,40 @@ func TestConfigValidate(t *testing.T) {
 	}{
 		{
 			name:    "missing host",
-			cfg:     Config{Host: "", Tags: []string{"TagA"}},
+			cfg:     Config{RequestTimeout: 5 * time.Second, Host: "", Tags: []string{"TagA"}},
 			wantErr: "host must be specified",
 		},
 		{
 			name:    "missing tags",
-			cfg:     Config{Host: "127.0.0.1", Tags: nil},
+			cfg:     Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Tags: nil},
 			wantErr: "at least one tag must be specified",
 		},
 		{
 			name: "valid config",
-			cfg:  Config{Host: "127.0.0.1", Tags: []string{"TagA"}},
+			cfg:  Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Tags: []string{"TagA"}},
 		},
 		{
 			name:    "port out of range",
-			cfg:     Config{Host: "127.0.0.1", Port: 70000, Tags: []string{"TagA"}},
+			cfg:     Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Port: 70000, Tags: []string{"TagA"}},
 			wantErr: "is not a valid TCP port",
 		},
 		{
 			name: "valid config with unset port",
-			cfg:  Config{Host: "127.0.0.1", Port: 0, Tags: []string{"TagA"}},
+			cfg:  Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Port: 0, Tags: []string{"TagA"}},
+		},
+		{
+			name:    "zero request_timeout",
+			cfg:     Config{Host: "127.0.0.1", Tags: []string{"TagA"}},
+			wantErr: "request_timeout must be a positive duration",
+		},
+		{
+			name:    "negative request_timeout",
+			cfg:     Config{RequestTimeout: -time.Second, Host: "127.0.0.1", Tags: []string{"TagA"}},
+			wantErr: "request_timeout must be a positive duration",
 		},
 		{
 			name: "valid config with non-default port",
-			cfg:  Config{Host: "127.0.0.1", Port: 44819, Tags: []string{"TagA"}},
+			cfg:  Config{RequestTimeout: 5 * time.Second, Host: "127.0.0.1", Port: 44819, Tags: []string{"TagA"}},
 		},
 	}
 
@@ -73,7 +83,8 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, []string{"temperature"}, cfg.Tags)
 		assert.Equal(t, uint(44818), cfg.Port)
 		assert.Empty(t, cfg.DeviceName)
-		assert.Equal(t, 5*time.Second, cfg.Timeout)
+		assert.Equal(t, 5*time.Second, cfg.RequestTimeout)
+		assert.Equal(t, time.Duration(0), cfg.Timeout)
 		assert.Equal(t, time.Minute, cfg.CollectionInterval)
 		assert.Equal(t, time.Second, cfg.InitialDelay)
 		assert.True(t, cfg.Metrics.EthernetipDeviceUp.Enabled)
@@ -88,7 +99,8 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, uint(44818), cfg.Port)
 		assert.Equal(t, "line1-plc", cfg.DeviceName)
 		assert.Equal(t, []string{"temperature", "pumpstatus", "flow_rate"}, cfg.Tags)
-		assert.Equal(t, 2*time.Second, cfg.Timeout)
+		assert.Equal(t, 2*time.Second, cfg.RequestTimeout)
+		assert.Equal(t, 20*time.Second, cfg.Timeout)
 		assert.Equal(t, 30*time.Second, cfg.CollectionInterval)
 		assert.Equal(t, 5*time.Second, cfg.InitialDelay)
 		assert.True(t, cfg.Metrics.EthernetipTagValue.Enabled)

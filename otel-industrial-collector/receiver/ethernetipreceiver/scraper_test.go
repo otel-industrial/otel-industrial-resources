@@ -22,6 +22,8 @@ type fakeCIPClient struct {
 	readValues       map[string]float64
 	readErrs         map[string]error
 	disconnectCalled bool
+	// onRead, if set, runs after each ReadTag call.
+	onRead func(tagName string)
 }
 
 func (f *fakeCIPClient) Connect() error {
@@ -53,6 +55,9 @@ func (f *fakeCIPClient) Ping() error {
 }
 
 func (f *fakeCIPClient) ReadTag(tagName string) (float64, error) {
+	if f.onRead != nil {
+		defer f.onRead(tagName)
+	}
 	if err, ok := f.readErrs[tagName]; ok {
 		return 0, err
 	}
@@ -122,6 +127,45 @@ func TestScrapeDetectsMidRunDrop(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
 	assert.False(t, client.connected)
+}
+
+func TestScrapeStopsAtDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var read []string
+	client := &fakeCIPClient{
+		connected:  true,
+		readValues: map[string]float64{"TagA": 1, "TagB": 2, "TagC": 3},
+		onRead: func(tagName string) {
+			read = append(read, tagName)
+			cancel() // the scrape deadline expires after the first tag
+		},
+	}
+	s := newTestScraper(t, client, []string{"TagA", "TagB", "TagC"})
+
+	metrics, err := s.scrape(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"TagA"}, read)
+
+	var tagPoints int
+	ms := metrics.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
+	for i := 0; i < ms.Len(); i++ {
+		if ms.At(i).Name() == "ethernetip.tag.value" {
+			tagPoints = ms.At(i).Gauge().DataPoints().Len()
+		}
+	}
+	assert.Equal(t, 1, tagPoints, "values read before the deadline are still emitted")
+}
+
+func TestNewScraperUsesRequestTimeout(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	cfg.Host = "127.0.0.1"
+	cfg.RequestTimeout = 750 * time.Millisecond
+	cfg.Timeout = 30 * time.Second
+
+	s := newScraper(cfg, receivertest.NewNopSettings(metadata.Type))
+	assert.Equal(t, 750*time.Millisecond, s.client.(*gologixClient).client.SocketTimeout)
 }
 
 func TestShutdownDisconnects(t *testing.T) {

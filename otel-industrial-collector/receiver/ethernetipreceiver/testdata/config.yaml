@@ -12,7 +12,8 @@ ethernetip/all_settings:
   device_name: "line1-plc"
   collection_interval: 30s
   initial_delay: 5s
-  timeout: 2s
+  timeout: 20s
+  request_timeout: 2s
   tags:
     - temperature
     - pumpstatus
