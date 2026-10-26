@@ -18,7 +18,9 @@ jobs:
           go-version: '1.27'
       # Multi-module repo: test/vet/fmt every module. `go test ./...` does not
       # cross module boundaries, and `find -execdir` hides a failing command's
-      # exit code, so loop explicitly and fail if any module fails.
+      # exit code, so loop explicitly and fail if any module fails. Module
+      # downloads go through retry.sh so a proxy/sumdb blip doesn't fail the
+      # job; vet and test then run from the populated module cache.
       - name: Test all Go modules
         run: |
           set -uo pipefail
@@ -28,6 +30,7 @@ jobs:
             echo "== $dir =="
             (
               cd "$dir"
+              bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" go mod download &&
               go vet ./... &&
               { test -z "$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; false; }; } &&
               go test ./...

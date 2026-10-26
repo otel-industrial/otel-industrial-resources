@@ -10,11 +10,14 @@ import (
 // fakeConn records the calls Session makes so each reconnect path can be
 // asserted without a live device. When healOnConnect is set, a successful
 // Connect clears pingErr, modelling a connection that recovers after reconnect.
+// When pingErrAfterConnect is set, a successful Connect swaps pingErr to it,
+// modelling a reconnect that succeeds but whose verifying ping still fails.
 type fakeConn struct {
-	pingErr       error
-	connectErr    error
-	closeErr      error
-	healOnConnect bool
+	pingErr             error
+	connectErr          error
+	closeErr            error
+	healOnConnect       bool
+	pingErrAfterConnect error
 
 	pings    int
 	connects int
@@ -27,6 +30,9 @@ func (f *fakeConn) Connect(context.Context) error {
 	f.order = append(f.order, "connect")
 	if f.connectErr == nil && f.healOnConnect {
 		f.pingErr = nil
+	}
+	if f.connectErr == nil && f.pingErrAfterConnect != nil {
+		f.pingErr = f.pingErrAfterConnect
 	}
 	return f.connectErr
 }
@@ -95,6 +101,20 @@ func TestSessionEnsureLive(t *testing.T) {
 		err := s.EnsureLive(context.Background())
 		if !errors.Is(err, connErr) {
 			t.Errorf("EnsureLive error %v does not wrap connect error %v", err, connErr)
+		}
+		if !errors.Is(err, pingErr) {
+			t.Errorf("EnsureLive error %v drops the original ping error %v", err, pingErr)
+		}
+	})
+
+	t.Run("reconnect succeeds, re-ping fails, joins both ping errors", func(t *testing.T) {
+		pingErr := errors.New("socket dropped")
+		repingErr := errors.New("still no response")
+		fc := &fakeConn{pingErr: pingErr, pingErrAfterConnect: repingErr}
+		s := NewSession(fc)
+		err := s.EnsureLive(context.Background())
+		if !errors.Is(err, repingErr) {
+			t.Errorf("EnsureLive error %v does not wrap re-ping error %v", err, repingErr)
 		}
 		if !errors.Is(err, pingErr) {
 			t.Errorf("EnsureLive error %v drops the original ping error %v", err, pingErr)

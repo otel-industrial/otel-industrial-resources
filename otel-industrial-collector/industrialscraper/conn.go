@@ -44,7 +44,10 @@ func (s *Session) EnsureLive(ctx context.Context) error {
 	if err := s.conn.Connect(ctx); err != nil {
 		return errors.Join(pingErr, err)
 	}
-	return s.conn.Ping(ctx)
+	if err := s.conn.Ping(ctx); err != nil {
+		return errors.Join(pingErr, err)
+	}
+	return nil
 }
 
 func (s *Session) Close(ctx context.Context) error {
