@@ -29,6 +29,48 @@ func (f *fakeConn) Close(context.Context) error {
 	return f.closeErr
 }
 
+// pingConn is a fakeConn that also implements Pinger and records the call
+// order. A successful Connect sets pingErr to pingErrAfterConnect.
+type pingConn struct {
+	fakeConn
+	pingErr             error
+	pingErrAfterConnect error
+	pings               int
+	order               []string
+}
+
+func (p *pingConn) Connect(ctx context.Context) error {
+	p.order = append(p.order, "connect")
+	err := p.fakeConn.Connect(ctx)
+	if err == nil {
+		p.pingErr = p.pingErrAfterConnect
+	}
+	return err
+}
+
+func (p *pingConn) Close(ctx context.Context) error {
+	p.order = append(p.order, "close")
+	return p.fakeConn.Close(ctx)
+}
+
+func (p *pingConn) Ping(context.Context) error {
+	p.pings++
+	p.order = append(p.order, "ping")
+	return p.pingErr
+}
+
+func equalStrs(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // testBackOff is a jitter-free backoff: 10s, doubling, capped at 40s.
 func testBackOff() configretry.BackOffConfig {
 	c := DefaultBackOffConfig()
@@ -180,6 +222,95 @@ func TestSessionEnsureLiveCancelledContext(t *testing.T) {
 	if fc.connects != 0 {
 		t.Errorf("connects = %d, want 0 (no dial on a cancelled scrape)", fc.connects)
 	}
+}
+
+// The first EnsureLive only connects: a client with no connection is never
+// pinged (a nil-connection ping panicked the EtherNet/IP receiver).
+func TestSessionPingNotBeforeFirstConnect(t *testing.T) {
+	pc := &pingConn{}
+	s, _ := newTestSession(&pc.fakeConn, testBackOff())
+	s.conn = pc
+	if err := s.EnsureLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"connect"}; !equalStrs(pc.order, want) {
+		t.Errorf("call order = %v, want %v", pc.order, want)
+	}
+}
+
+func TestSessionPing(t *testing.T) {
+	// connected returns a session with an open connection to pc.
+	connected := func(t *testing.T, pc *pingConn) (*Session, func(time.Duration)) {
+		t.Helper()
+		s, advance := newTestSession(&pc.fakeConn, testBackOff())
+		s.conn = pc
+		if err := s.EnsureLive(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		pc.order = nil
+		return s, advance
+	}
+	ctx := context.Background()
+
+	t.Run("ping ok, no reconnect", func(t *testing.T) {
+		pc := &pingConn{}
+		s, _ := connected(t, pc)
+		if err := s.EnsureLive(ctx); err != nil {
+			t.Fatalf("EnsureLive returned %v, want nil", err)
+		}
+		if want := []string{"ping"}; !equalStrs(pc.order, want) {
+			t.Errorf("call order = %v, want %v", pc.order, want)
+		}
+	})
+
+	t.Run("ping fails, close then reconnect and verify", func(t *testing.T) {
+		pc := &pingConn{}
+		s, _ := connected(t, pc)
+		pc.pingErr = errors.New("socket dropped")
+		if err := s.EnsureLive(ctx); err != nil {
+			t.Fatalf("EnsureLive returned %v, want nil after a successful reconnect", err)
+		}
+		if want := []string{"ping", "close", "connect", "ping"}; !equalStrs(pc.order, want) {
+			t.Errorf("call order = %v, want %v (close before connect, verify ping after)", pc.order, want)
+		}
+	})
+
+	t.Run("ping fails, reconnect fails, joins both and backs off", func(t *testing.T) {
+		pc := &pingConn{}
+		s, _ := connected(t, pc)
+		pingErr := errors.New("socket dropped")
+		connErr := errors.New("device unreachable")
+		pc.pingErr, pc.connectErr = pingErr, connErr
+		err := s.EnsureLive(ctx)
+		if !errors.Is(err, pingErr) || !errors.Is(err, connErr) {
+			t.Fatalf("EnsureLive returned %v, want it to wrap %v and %v", err, pingErr, connErr)
+		}
+		if err := s.EnsureLive(ctx); !errors.Is(err, ErrBackingOff) {
+			t.Errorf("next EnsureLive returned %v, want ErrBackingOff", err)
+		}
+	})
+
+	t.Run("reconnect ok, re-ping fails, joins both and backs off", func(t *testing.T) {
+		pc := &pingConn{}
+		s, _ := connected(t, pc)
+		pingErr := errors.New("socket dropped")
+		repingErr := errors.New("still no response")
+		pc.pingErr, pc.pingErrAfterConnect = pingErr, repingErr
+		err := s.EnsureLive(ctx)
+		if !errors.Is(err, pingErr) || !errors.Is(err, repingErr) {
+			t.Fatalf("EnsureLive returned %v, want it to wrap %v and %v", err, pingErr, repingErr)
+		}
+		if pc.closes != 2 {
+			t.Errorf("closes = %d, want 2 (the dead connection and the unverified one)", pc.closes)
+		}
+		dials := pc.connects
+		if err := s.EnsureLive(ctx); !errors.Is(err, ErrBackingOff) {
+			t.Errorf("next EnsureLive returned %v, want ErrBackingOff", err)
+		}
+		if pc.connects != dials {
+			t.Errorf("dialed inside the backoff window")
+		}
+	})
 }
 
 func TestJitterWithinFactor(t *testing.T) {

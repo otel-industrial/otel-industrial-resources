@@ -34,8 +34,15 @@ scraperhelper leaves to each receiver:
 - `Close` drops the connection. Call it after a transport error, and the next
   `EnsureLive` reconnects. It also matches `scraper.WithShutdown`.
 
-A dead connection is detected by the transport error on the next read, the
-same way for every protocol. A `Session` is safe for concurrent use.
+A dead connection is detected by the transport error on the next read. A
+protocol with a cheap liveness round-trip (EtherNet/IP `ListIdentity`) also
+implements `Pinger`. `EnsureLive` then pings an open connection before the
+reads, so a socket that dropped silently between polls is replaced in the same
+poll: it closes the dead connection, reconnects (subject to the backoff), and
+pings again, and a failure wraps both errors. A connection that was never
+opened is not pinged. `Ping` must be a real round-trip rather than a cached
+flag. Protocols without a cheap round-trip (Modbus) skip `Pinger`. A `Session`
+is safe for concurrent use.
 
 Receivers expose the backoff as `reconnect_on_failure`, defaulted from
 `DefaultBackOffConfig`.
