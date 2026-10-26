@@ -24,6 +24,8 @@ go.opentelemetry.io/collector/internal/testutil v0.163.0 h1:JR65ZHtuOP1E5cJZKl4u
 go.opentelemetry.io/collector/internal/testutil v0.163.0/go.mod h1:RUvWdMZGEBicc0C3teDcnTrifUX8HB4AJ4l8pMONURU=
 go.opentelemetry.io/collector/pdata v1.69.0 h1:u0a2n1kOS/OGwIEQMOKCnl+bbmFG5wGO/OfFXajICpA=
 go.opentelemetry.io/collector/pdata v1.69.0/go.mod h1:5U4aIRhQKQgo3DifeWgVdWBhSBbYV2BQ6Nz4bJc7dfE=
+go.opentelemetry.io/collector/scraper v0.163.0 h1:k5H+XrwrQWDWQ8mrqes76LbJciWjufrYUR+EP0tvCKM=
+go.opentelemetry.io/collector/scraper v0.163.0/go.mod h1:eabgoeNZIcYXo3CbmXomBrRBL0mZpGs2BMRghEoIeyA=
 go.opentelemetry.io/proto/slim/otlp v1.11.1 h1:qf2OA3kQcIDXh3q7b6kc0IzRe8BFXlVIlH5uaOACrVQ=
 go.opentelemetry.io/proto/slim/otlp v1.11.1/go.mod h1:15pWfj6/rYjQzyrC3ZGQoZ0rNgLqI/Lk+jFgYgV4UIE=
 go.opentelemetry.io/proto/slim/otlp/collector/profiles/v1development v0.4.1 h1:pgPIbi29ViNY/gE//bHlHuLyqHE+PDhhw7jAhItWIaM=

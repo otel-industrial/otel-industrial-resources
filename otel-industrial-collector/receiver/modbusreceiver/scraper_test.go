@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"go.opentelemetry.io/collector/scraper/scrapererror"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
@@ -86,8 +87,8 @@ func okRead(kind RegisterType, _, quantity uint16) ([]byte, error) {
 // newTestScraper returns a scraper wired to dev, plus a counter of dial calls.
 func newTestScraper(cfg *Config, dev *fakeDevice) (*modbusScraper, *int) {
 	dials := 0
-	s := newModbusScraper(cfg, testSettings())
-	s.dial = func(*Config) (modbus.Client, io.Closer, error) {
+	s := newModbusScraper(cfg, testSettings(), dialTCP)
+	s.conn.dial = func(*Config) (modbus.Client, io.Closer, error) {
 		dials++
 		return dev, dev, nil
 	}
@@ -302,7 +303,7 @@ func TestScrapeTransportErrorMidScan(t *testing.T) {
 	assert.NotContains(t, dps, int64(1))
 	assert.NotContains(t, dps, int64(2))
 	assert.Equal(t, 1, dev.closedCount(), "connection should be closed after a transport error")
-	assert.Nil(t, s.client)
+	assert.Nil(t, s.conn.client)
 
 	// The device recovers: the next scrape reconnects and reads everything.
 	dev.setRead(okRead)
@@ -331,7 +332,7 @@ func TestScrapeModbusExceptionKeepsConnection(t *testing.T) {
 	assert.NotContains(t, dps, int64(1))
 	assert.Contains(t, dps, int64(2))
 	assert.Equal(t, 0, dev.closedCount())
-	assert.NotNil(t, s.client)
+	assert.NotNil(t, s.conn.client)
 
 	_, err = s.scrape(context.Background())
 	requirePartial(t, err, 1)
@@ -358,11 +359,12 @@ func TestScrapeShortResponseKeepsConnection(t *testing.T) {
 
 func TestScrapeDialError(t *testing.T) {
 	cfg := testConfig(holding(0, DataTypeUint16))
+	cfg.ReconnectOnFailure.Enabled = false // redial on the next scrape
 	dev := &fakeDevice{read: okRead}
-	s := newModbusScraper(cfg, testSettings())
+	s := newModbusScraper(cfg, testSettings(), dialTCP)
 	dialErr := errors.New("connection refused")
 	fail := true
-	s.dial = func(*Config) (modbus.Client, io.Closer, error) {
+	s.conn.dial = func(*Config) (modbus.Client, io.Closer, error) {
 		if fail {
 			return nil, nil, dialErr
 		}
@@ -377,6 +379,48 @@ func TestScrapeDialError(t *testing.T) {
 	md, err = s.scrape(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, md.DataPointCount())
+}
+
+// After a failed dial the scraper waits out the reconnect backoff instead of
+// dialing the device again on the next scrape.
+func TestScrapeBacksOffAfterDialError(t *testing.T) {
+	cfg := testConfig(holding(0, DataTypeUint16))
+	s := newModbusScraper(cfg, testSettings(), dialTCP)
+	dialErr := errors.New("connection refused")
+	dials := 0
+	s.conn.dial = func(*Config) (modbus.Client, io.Closer, error) {
+		dials++
+		return nil, nil, dialErr
+	}
+
+	_, err := s.scrape(context.Background())
+	require.ErrorIs(t, err, dialErr)
+	md, err := s.scrape(context.Background())
+	require.ErrorIs(t, err, industrialscraper.ErrBackingOff)
+	require.ErrorIs(t, err, dialErr, "the backoff error should carry the last dial error for the log")
+	assert.Equal(t, 0, md.DataPointCount())
+	assert.Equal(t, 1, dials, "no dial inside the backoff window")
+}
+
+// Polls to one device are serialized process-wide, so a scrape waits while
+// another receiver holds the device.
+func TestScrapeWaitsForDeviceLimiter(t *testing.T) {
+	cfg := testConfig(holding(0, DataTypeUint16))
+	cfg.Endpoint = "limiter-test.invalid:502"
+	dev := &fakeDevice{read: okRead}
+	s, dials := newTestScraper(cfg, dev)
+
+	lim := industrialscraper.DeviceLimiter(cfg.Endpoint)
+	require.NoError(t, lim.Acquire(context.Background()))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := s.scrape(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 0, *dials, "the scrape must not touch the device while another poll holds it")
+
+	lim.Release()
+	_, err = s.scrape(context.Background())
+	require.NoError(t, err)
 }
 
 // dialTCP against a device that accepts the connection but never answers:
@@ -429,22 +473,37 @@ func TestScraperShutdownClosesConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.shutdown(context.Background()))
 	assert.Equal(t, 1, dev.closedCount())
-	assert.Nil(t, s.client)
+	assert.Nil(t, s.conn.client)
 }
 
 func TestScrapeStopsWhenContextDone(t *testing.T) {
-	cfg := testConfig(holding(0, DataTypeUint16), holding(1, DataTypeUint16))
-	dev := &fakeDevice{read: okRead}
+	cfg := testConfig(holding(0, DataTypeUint16), holding(1, DataTypeUint16), holding(2, DataTypeUint16))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// The deadline passes while the first register is being read.
+	dev := &fakeDevice{read: func(kind RegisterType, address, quantity uint16) ([]byte, error) {
+		cancel()
+		return okRead(kind, address, quantity)
+	}}
 	s, _ := newTestScraper(cfg, dev)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
 	md, err := s.scrape(ctx)
 	requirePartial(t, err, 2)
 	// PartialScrapeError does not unwrap, so check the message.
 	assert.ErrorContains(t, err, context.Canceled.Error())
-	assert.Equal(t, 0, md.DataPointCount())
+	assert.Equal(t, 1, md.DataPointCount(), "the register read before the deadline is still emitted")
 	assert.Equal(t, 0, dev.closedCount(), "a timed-out scan should keep the connection")
+}
+
+// A scrape that is already cancelled does not reach the device.
+func TestScrapeCancelledBeforeStart(t *testing.T) {
+	dev := &fakeDevice{read: okRead}
+	s, dials := newTestScraper(testConfig(holding(0, DataTypeUint16)), dev)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := s.scrape(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 0, *dials)
 }
 
 // End to end through the scraperhelper controller: a transport error must

@@ -110,6 +110,18 @@ The following settings are optional:
   already in flight still runs until it completes or hits `request_timeout`.
 - `request_timeout` (default = `5s`): Timeout for connecting and for each Modbus
   request.
+- `reconnect_on_failure`: Backoff between reconnects to a device that is down,
+  so a struggling PLC isn't redialed on every poll. It uses the standard
+  collector
+  [retry settings](https://github.com/open-telemetry/opentelemetry-collector/tree/main/config/configretry):
+  - `enabled` (default = `true`): When `false`, the receiver redials on every
+    poll.
+  - `initial_interval` (default = `10s`): Wait after the first failed connect.
+  - `multiplier` (default = `1.5`) and `randomization_factor` (default = `0.5`):
+    How the wait grows after each failure, and how much it is randomized.
+  - `max_interval` (default = `60s`): Longest wait between reconnects.
+  - `max_elapsed_time` (default = `5m`): Once a device has been down this long,
+    every wait is `max_interval`. Reconnects never stop.
 
 `collection_interval`, `initial_delay` and `timeout` are the standard
 [scraper controller settings](https://github.com/open-telemetry/opentelemetry-collector/tree/main/scraper/scraperhelper)
@@ -204,8 +216,12 @@ such as timestamps or IDs in `name`.
 - **Startup:** The receiver starts without connecting. It connects on the first
   poll, so an unreachable device does not block collector startup.
 - **Device unreachable:** The scrape fails, the collector logs one error for
-  it, and no metrics are emitted. The receiver tries to connect again on the
-  next poll.
+  it, and no metrics are emitted. The receiver waits out the
+  `reconnect_on_failure` backoff before it connects again. Polls inside the
+  backoff window fail without contacting the device.
+- **Several receivers on one device:** Polls to the same `endpoint` are
+  serialized across the collector, so receivers sharing a device or gateway
+  take turns instead of polling it at once.
 - **Connection lost during a poll:** The connection is closed, the remaining
   registers are skipped for that poll, and values already read are still
   emitted. The receiver reconnects on the next poll.

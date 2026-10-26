@@ -5,149 +5,206 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
+
+	"go.opentelemetry.io/collector/config/configretry"
 )
 
-// fakeConn records the calls Session makes so each reconnect path can be
-// asserted without a live device. When healOnConnect is set, a successful
-// Connect clears pingErr, modelling a connection that recovers after reconnect.
-// When pingErrAfterConnect is set, a successful Connect swaps pingErr to it,
-// modelling a reconnect that succeeds but whose verifying ping still fails.
+// fakeConn counts the calls Session makes and fails Connect while connectErr
+// is set.
 type fakeConn struct {
-	pingErr             error
-	connectErr          error
-	closeErr            error
-	healOnConnect       bool
-	pingErrAfterConnect error
-
-	pings    int
-	connects int
-	closes   int
-	order    []string // call sequence, so close-before-reconnect is checkable
+	connectErr error
+	closeErr   error
+	connects   int
+	closes     int
 }
 
 func (f *fakeConn) Connect(context.Context) error {
 	f.connects++
-	f.order = append(f.order, "connect")
-	if f.connectErr == nil && f.healOnConnect {
-		f.pingErr = nil
-	}
-	if f.connectErr == nil && f.pingErrAfterConnect != nil {
-		f.pingErr = f.pingErrAfterConnect
-	}
 	return f.connectErr
-}
-
-func (f *fakeConn) Ping(context.Context) error {
-	f.pings++
-	f.order = append(f.order, "ping")
-	return f.pingErr
 }
 
 func (f *fakeConn) Close(context.Context) error {
 	f.closes++
-	f.order = append(f.order, "close")
 	return f.closeErr
 }
 
-func equalStrs(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+// testBackOff is a jitter-free backoff: 10s, doubling, capped at 40s.
+func testBackOff() configretry.BackOffConfig {
+	c := DefaultBackOffConfig()
+	c.InitialInterval = 10 * time.Second
+	c.MaxInterval = 40 * time.Second
+	c.Multiplier = 2
+	c.RandomizationFactor = 0
+	return c
 }
 
-func TestSessionEnsureLive(t *testing.T) {
-	t.Run("ping ok, no reconnect", func(t *testing.T) {
-		fc := &fakeConn{}
-		s := NewSession(fc)
+// newTestSession returns a session on a fake clock and a func to advance it.
+func newTestSession(fc *fakeConn, b configretry.BackOffConfig) (*Session, func(time.Duration)) {
+	fclock := time.Unix(1_000_000, 0)
+	s := NewSession(fc, b)
+	s.now = func() time.Time { return fclock }
+	return s, func(d time.Duration) { fclock = fclock.Add(d) }
+}
+
+func TestSessionEnsureLiveConnectsOnce(t *testing.T) {
+	fc := &fakeConn{}
+	s, _ := newTestSession(fc, testBackOff())
+	for range 3 {
 		if err := s.EnsureLive(context.Background()); err != nil {
 			t.Fatalf("EnsureLive returned %v, want nil", err)
 		}
-		if fc.pings != 1 {
-			t.Errorf("pings = %d, want 1", fc.pings)
-		}
-		if fc.connects != 0 {
-			t.Errorf("connects = %d, want 0 (healthy ping must not reconnect)", fc.connects)
-		}
-	})
-
-	t.Run("ping fails, reconnect closes then succeeds", func(t *testing.T) {
-		fc := &fakeConn{pingErr: errors.New("socket dropped"), healOnConnect: true}
-		s := NewSession(fc)
-		if err := s.EnsureLive(context.Background()); err != nil {
-			t.Fatalf("EnsureLive returned %v, want nil after successful reconnect", err)
-		}
-		if fc.closes != 1 {
-			t.Errorf("closes = %d, want 1 (dead conn must be closed before reconnect)", fc.closes)
-		}
-		if fc.connects != 1 {
-			t.Errorf("connects = %d, want 1", fc.connects)
-		}
-		if want := []string{"ping", "close", "connect", "ping"}; !equalStrs(fc.order, want) {
-			t.Errorf("call order = %v, want %v (close before connect, verify ping after)", fc.order, want)
-		}
-	})
-
-	t.Run("ping fails, reconnect fails, joins both errors", func(t *testing.T) {
-		pingErr := errors.New("socket dropped")
-		connErr := errors.New("device unreachable")
-		fc := &fakeConn{pingErr: pingErr, connectErr: connErr}
-		s := NewSession(fc)
-		err := s.EnsureLive(context.Background())
-		if !errors.Is(err, connErr) {
-			t.Errorf("EnsureLive error %v does not wrap connect error %v", err, connErr)
-		}
-		if !errors.Is(err, pingErr) {
-			t.Errorf("EnsureLive error %v drops the original ping error %v", err, pingErr)
-		}
-	})
-
-	t.Run("reconnect succeeds, re-ping fails, joins both ping errors", func(t *testing.T) {
-		pingErr := errors.New("socket dropped")
-		repingErr := errors.New("still no response")
-		fc := &fakeConn{pingErr: pingErr, pingErrAfterConnect: repingErr}
-		s := NewSession(fc)
-		err := s.EnsureLive(context.Background())
-		if !errors.Is(err, repingErr) {
-			t.Errorf("EnsureLive error %v does not wrap re-ping error %v", err, repingErr)
-		}
-		if !errors.Is(err, pingErr) {
-			t.Errorf("EnsureLive error %v drops the original ping error %v", err, pingErr)
-		}
-	})
+	}
+	if fc.connects != 1 {
+		t.Errorf("connects = %d, want 1 (an open connection is reused)", fc.connects)
+	}
 }
 
-func TestSessionClose(t *testing.T) {
+func TestSessionCloseThenReconnect(t *testing.T) {
+	fc := &fakeConn{}
+	s, _ := newTestSession(fc, testBackOff())
+	ctx := context.Background()
+	if err := s.EnsureLive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.EnsureLive(ctx); err != nil {
+		t.Fatalf("EnsureLive after Close returned %v, want nil", err)
+	}
+	if fc.closes != 1 || fc.connects != 2 {
+		t.Errorf("closes = %d, connects = %d, want 1 and 2 (Close drops the connection, next EnsureLive redials at once)", fc.closes, fc.connects)
+	}
+}
+
+func TestSessionCloseReturnsConnError(t *testing.T) {
 	closeErr := errors.New("close boom")
 	fc := &fakeConn{closeErr: closeErr}
-	s := NewSession(fc)
+	s, _ := newTestSession(fc, testBackOff())
 	if err := s.Close(context.Background()); !errors.Is(err, closeErr) {
 		t.Fatalf("Close returned %v, want %v", err, closeErr)
 	}
-	if fc.closes != 1 {
-		t.Errorf("closes = %d, want 1", fc.closes)
+}
+
+func TestSessionBackoff(t *testing.T) {
+	dialErr := errors.New("connection refused")
+	fc := &fakeConn{connectErr: dialErr}
+	s, advance := newTestSession(fc, testBackOff())
+	ctx := context.Background()
+
+	if err := s.EnsureLive(ctx); !errors.Is(err, dialErr) {
+		t.Fatalf("first EnsureLive returned %v, want %v", err, dialErr)
+	}
+
+	// Each failure doubles the wait: 10s, 20s, then capped at 40s.
+	for _, wait := range []time.Duration{10 * time.Second, 20 * time.Second, 40 * time.Second, 40 * time.Second} {
+		advance(wait - time.Second)
+		err := s.EnsureLive(ctx)
+		if !errors.Is(err, ErrBackingOff) || !errors.Is(err, dialErr) {
+			t.Fatalf("EnsureLive %v into a %v window returned %v, want ErrBackingOff wrapping the last dial error", wait-time.Second, wait, err)
+		}
+		dials := fc.connects
+		advance(time.Second)
+		if err := s.EnsureLive(ctx); !errors.Is(err, dialErr) {
+			t.Fatalf("EnsureLive at the end of a %v window returned %v, want a fresh dial error", wait, err)
+		}
+		if fc.connects != dials+1 {
+			t.Fatalf("connects = %d, want %d (one dial once the window ends)", fc.connects, dials+1)
+		}
+	}
+
+	// A successful connect resets the backoff.
+	fc.connectErr = nil
+	advance(40 * time.Second)
+	if err := s.EnsureLive(ctx); err != nil {
+		t.Fatalf("EnsureLive returned %v, want nil once the device is back", err)
+	}
+	_ = s.Close(ctx)
+	fc.connectErr = dialErr
+	_ = s.EnsureLive(ctx)
+	advance(10 * time.Second)
+	dials := fc.connects
+	_ = s.EnsureLive(ctx)
+	if fc.connects != dials+1 {
+		t.Errorf("after a success the next window should be InitialInterval (10s) again")
+	}
+}
+
+// MaxElapsedTime never stops reconnects: once a failure streak outlasts it,
+// every later wait is MaxInterval.
+func TestSessionBackoffMaxElapsedHoldsAtMaxInterval(t *testing.T) {
+	fc := &fakeConn{connectErr: errors.New("down")}
+	b := testBackOff()
+	b.Multiplier = 1 // no growth, so only MaxElapsedTime can raise the wait
+	b.MaxElapsedTime = 30 * time.Second
+	s, advance := newTestSession(fc, b)
+	ctx := context.Background()
+
+	_ = s.EnsureLive(ctx) // streak starts; next wait 10s
+	for _, wait := range []time.Duration{10 * time.Second, 10 * time.Second, 10 * time.Second, 40 * time.Second, 40 * time.Second} {
+		advance(wait - time.Second)
+		if err := s.EnsureLive(ctx); !errors.Is(err, ErrBackingOff) {
+			t.Fatalf("expected a %v window, but EnsureLive dialed early (err %v)", wait, err)
+		}
+		advance(time.Second)
+		dials := fc.connects
+		_ = s.EnsureLive(ctx)
+		if fc.connects != dials+1 {
+			t.Fatalf("expected a dial at the end of a %v window", wait)
+		}
+	}
+}
+
+func TestSessionBackoffDisabledRedialsEveryTime(t *testing.T) {
+	fc := &fakeConn{connectErr: errors.New("down")}
+	b := testBackOff()
+	b.Enabled = false
+	s, _ := newTestSession(fc, b)
+	for range 3 {
+		_ = s.EnsureLive(context.Background())
+	}
+	if fc.connects != 3 {
+		t.Errorf("connects = %d, want 3 (backoff disabled dials on every call)", fc.connects)
+	}
+}
+
+func TestSessionEnsureLiveCancelledContext(t *testing.T) {
+	fc := &fakeConn{}
+	s, _ := newTestSession(fc, testBackOff())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.EnsureLive(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("EnsureLive returned %v, want context.Canceled", err)
+	}
+	if fc.connects != 0 {
+		t.Errorf("connects = %d, want 0 (no dial on a cancelled scrape)", fc.connects)
+	}
+}
+
+func TestJitterWithinFactor(t *testing.T) {
+	for range 1000 {
+		got := jitter(10*time.Second, 0.5)
+		if got < 5*time.Second || got > 15*time.Second {
+			t.Fatalf("jitter(10s, 0.5) = %v, want within [5s, 15s]", got)
+		}
+	}
+	if got := jitter(10*time.Second, 0); got != 10*time.Second {
+		t.Errorf("jitter(10s, 0) = %v, want 10s", got)
 	}
 }
 
 // TestSessionConcurrent exercises EnsureLive and Close from several goroutines.
-// Run with -race: without a mutex guarding the Session, the concurrent reconnect
-// path races on the shared connection state.
+// Run with -race.
 func TestSessionConcurrent(t *testing.T) {
-	fc := &fakeConn{pingErr: errors.New("down")}
-	s := NewSession(fc)
+	fc := &fakeConn{connectErr: errors.New("down")}
+	s := NewSession(fc, testBackOff())
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 8 {
+		wg.Go(func() {
 			_ = s.EnsureLive(context.Background())
 			_ = s.Close(context.Background())
-		}()
+		})
 	}
 	wg.Wait()
 }

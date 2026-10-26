@@ -2,15 +2,17 @@ package industrialscraper
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/collector/config/configretry"
 )
 
-// DefaultBackOffConfig returns retry defaults tuned for field devices. Legacy
-// PLCs tolerate far less polling pressure than a cloud backend, so it backs off
-// more slowly and to a higher ceiling than the upstream 5s/30s, giving a
-// struggling device room to recover while staying bounded by MaxElapsedTime.
+// DefaultBackOffConfig returns reconnect backoff defaults tuned for field
+// devices, for Session. Legacy PLCs tolerate far less polling pressure than a
+// cloud backend, so it backs off more slowly and to a higher ceiling than the
+// upstream 5s/30s, giving a struggling device room to recover. Session never
+// gives up on a device: after MaxElapsedTime it keeps retrying at MaxInterval.
 // See README.
 func DefaultBackOffConfig() configretry.BackOffConfig {
 	c := configretry.NewDefaultBackOffConfig()
@@ -62,4 +64,17 @@ func (l *Limiter) Release() {
 	default:
 		panic("industrialscraper: Limiter.Release called without a matching Acquire")
 	}
+}
+
+var deviceLimiters sync.Map // device key -> *Limiter
+
+// DeviceLimiter returns the process-wide limiter for one device, keyed by its
+// address (e.g. "10.0.0.5:502"). It allows one poll at a time, so several
+// receivers pointed at the same PLC take turns instead of polling it at once.
+//
+// ponytail: fixed at one poll per device and never evicted; add a per-device
+// max when a device is shown to tolerate parallel polls.
+func DeviceLimiter(key string) *Limiter {
+	l, _ := deviceLimiters.LoadOrStore(key, NewLimiter(1))
+	return l.(*Limiter)
 }

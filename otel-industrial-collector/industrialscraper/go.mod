@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	go.opentelemetry.io/collector/config/configretry v1.69.0
 	go.opentelemetry.io/collector/pdata v1.69.0
+	go.opentelemetry.io/collector/scraper v0.163.0
 )
 
 require (

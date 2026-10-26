@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/collector/scraper"
 	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
@@ -38,6 +39,7 @@ func createDefaultConfig() component.Config {
 		UnitID:               1,
 		RequestTimeout:       5 * time.Second,
 		Registers:            []RegisterDefinition{},
+		ReconnectOnFailure:   industrialscraper.DefaultBackOffConfig(),
 	}
 }
 
@@ -54,8 +56,7 @@ func createMetricsReceiver(
 // The connection is opened lazily on the first scrape, so Start returns
 // quickly. dial is a parameter so tests can substitute a fake device.
 func newMetricsReceiver(cfg *Config, settings receiver.Settings, consumer consumer.Metrics, dial dialFunc) (receiver.Metrics, error) {
-	s := newModbusScraper(cfg, settings)
-	s.dial = dial
+	s := newModbusScraper(cfg, settings, dial)
 
 	sc, err := scraper.NewMetrics(s.scrape, scraper.WithShutdown(s.shutdown))
 	if err != nil {

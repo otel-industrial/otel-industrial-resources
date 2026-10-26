@@ -27,6 +27,10 @@ development workflow lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
   so `ABCD`, `DCBA`, `BADC` and `CDAB` are supported per register.
 - **Lazy connection.** The receiver connects on the first poll instead of in
   `Start`, so an unreachable device never blocks collector startup.
+- **Shared connection handling.** The connection, the reconnect backoff, the
+  per-device poll limit, byte-order decoding and partial scrape errors come
+  from the shared `industrialscraper` module, so they behave the same in every
+  industrial receiver.
 - **Error classification.** Transport errors drop the connection and end the
   poll, and the next poll reconnects. Modbus exception responses and responses
   that can't be decoded only skip the affected register, so one misconfigured

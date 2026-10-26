@@ -19,6 +19,14 @@ modbus/all_settings:
   timeout: 20s
   # Timeout for connecting and for each Modbus request.
   request_timeout: 2s
+  # Backoff between reconnects to a device that is down. The wait grows from
+  # initial_interval to max_interval; after max_elapsed_time it stays at
+  # max_interval. Reconnects never stop.
+  reconnect_on_failure:
+    enabled: true
+    initial_interval: 15s
+    max_interval: 2m
+    max_elapsed_time: 10m
   registers:
     # Holding register (FC03) decoded as a 32-bit float from two registers.
     - address: 100

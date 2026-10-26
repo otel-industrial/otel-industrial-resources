@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
 )
 
@@ -161,6 +162,7 @@ func TestLoadConfig(t *testing.T) {
 			{Address: 0, Type: RegisterTypeHoldingRegister, DataType: DataTypeUint16, ByteOrder: ByteOrderABCD},
 		}, cfg.Registers)
 		assert.Equal(t, metadata.DefaultMetricsConfig(), cfg.Metrics)
+		assert.Equal(t, industrialscraper.DefaultBackOffConfig(), cfg.ReconnectOnFailure)
 	})
 
 	t.Run("all_settings", func(t *testing.T) {
@@ -180,6 +182,10 @@ func TestLoadConfig(t *testing.T) {
 		}, cfg.Registers)
 		assert.False(t, cfg.Metrics.ModbusCoilValue.Enabled)
 		assert.True(t, cfg.Metrics.ModbusRegisterValue.Enabled, "unset metrics keep their default")
+		assert.True(t, cfg.ReconnectOnFailure.Enabled)
+		assert.Equal(t, 15*time.Second, cfg.ReconnectOnFailure.InitialInterval)
+		assert.Equal(t, 2*time.Minute, cfg.ReconnectOnFailure.MaxInterval)
+		assert.Equal(t, 10*time.Minute, cfg.ReconnectOnFailure.MaxElapsedTime)
 	})
 }
 

@@ -2,7 +2,9 @@ package industrialscraper
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/collector/config/configretry"
 )
@@ -16,7 +18,7 @@ func TestDefaultBackOffConfigIsValid(t *testing.T) {
 		t.Errorf("default backoff config is invalid: %v", err)
 	}
 	if cfg.MaxElapsedTime == 0 {
-		t.Error("MaxElapsedTime should be finite so retries cannot run unbounded against a PLC")
+		t.Error("MaxElapsedTime should be set so a long outage settles at MaxInterval")
 	}
 }
 
@@ -91,4 +93,24 @@ func TestReleaseWithoutAcquirePanics(t *testing.T) {
 		}
 	}()
 	l.Release()
+}
+
+func TestDeviceLimiterSharedPerKey(t *testing.T) {
+	a := DeviceLimiter("10.0.0.5:502")
+	if a != DeviceLimiter("10.0.0.5:502") {
+		t.Fatal("same key returned different limiters; polls to one device would not be serialized")
+	}
+	if a == DeviceLimiter("10.0.0.6:502") {
+		t.Fatal("different keys share a limiter; unrelated devices would block each other")
+	}
+	ctx := context.Background()
+	if err := a.Acquire(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Release()
+	short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	if err := DeviceLimiter("10.0.0.5:502").Acquire(short); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("second poll to the same device acquired (err %v), want it to wait for the first", err)
+	}
 }
