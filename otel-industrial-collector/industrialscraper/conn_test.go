@@ -124,8 +124,29 @@ func TestSessionCloseReturnsConnError(t *testing.T) {
 	closeErr := errors.New("close boom")
 	fc := &fakeConn{closeErr: closeErr}
 	s, _ := newTestSession(fc, testBackOff())
+	if err := s.EnsureLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Close(context.Background()); !errors.Is(err, closeErr) {
 		t.Fatalf("Close returned %v, want %v", err, closeErr)
+	}
+}
+
+// Close with nothing open (shutdown before any successful connect) leaves the
+// client alone, so a protocol client that errors on a never-opened connection
+// does not log a spurious shutdown error.
+func TestSessionCloseWhenNotConnected(t *testing.T) {
+	fc := &fakeConn{connectErr: errors.New("down")}
+	s, _ := newTestSession(fc, testBackOff())
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("Close before any connect returned %v, want nil", err)
+	}
+	_ = s.EnsureLive(context.Background())
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("Close after a failed connect returned %v, want nil", err)
+	}
+	if fc.closes != 0 {
+		t.Errorf("closes = %d, want 0", fc.closes)
 	}
 }
 

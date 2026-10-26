@@ -14,6 +14,14 @@ ethernetip/all_settings:
   initial_delay: 5s
   timeout: 20s
   request_timeout: 2s
+  # Backoff between reconnects to a device that is down. The wait grows from
+  # initial_interval to max_interval; after max_elapsed_time it stays at
+  # max_interval. Reconnects never stop.
+  reconnect_on_failure:
+    enabled: true
+    initial_interval: 15s
+    max_interval: 2m
+    max_elapsed_time: 10m
   tags:
     - temperature
     - pumpstatus

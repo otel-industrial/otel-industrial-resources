@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
@@ -35,6 +36,10 @@ type Config struct {
 	// The embedded ControllerConfig owns `timeout`, the deadline for a whole
 	// scrape.
 	RequestTimeout time.Duration `mapstructure:"request_timeout"`
+
+	// ReconnectOnFailure is the backoff between reconnects to a device that
+	// is down.
+	ReconnectOnFailure configretry.BackOffConfig `mapstructure:"reconnect_on_failure"`
 }
 
 func (cfg *Config) Validate() error {

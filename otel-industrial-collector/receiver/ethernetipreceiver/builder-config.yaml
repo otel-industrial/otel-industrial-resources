@@ -14,3 +14,9 @@ exporters:
 
 processors:
   - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.163.0
+
+# The receiver uses the in-repo industrialscraper module. OCB ignores replace
+# directives in a component's go.mod, so point the build at it here. The path
+# is relative to output_path. Remove after tagging an industrialscraper release.
+replaces:
+  - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper => ../../../industrialscraper

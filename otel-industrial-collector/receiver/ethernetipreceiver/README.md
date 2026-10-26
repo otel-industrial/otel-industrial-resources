@@ -76,6 +76,18 @@ The following settings are optional:
   request to the device. Must be positive.
 - `timeout` (default = `0s`, no deadline): Deadline for one whole scrape of all
   tags. Tags not read when it expires are skipped for that scrape.
+- `reconnect_on_failure`: Backoff between reconnects to a device that is down,
+  so a struggling PLC isn't redialed on every scrape. It uses the standard
+  collector
+  [retry settings](https://github.com/open-telemetry/opentelemetry-collector/tree/main/config/configretry):
+  - `enabled` (default = `true`): When `false`, the receiver redials on every
+    scrape.
+  - `initial_interval` (default = `10s`): Wait after the first failed connect.
+  - `multiplier` (default = `1.5`) and `randomization_factor` (default = `0.5`):
+    How the wait grows after each failure, and how much it is randomized.
+  - `max_interval` (default = `60s`): Longest wait between reconnects.
+  - `max_elapsed_time` (default = `5m`): Once a device has been down this long,
+    every wait is `max_interval`. Reconnects never stop.
 - `collection_interval` (default = `1m`): How often the receiver polls the
   device. This value must be a string readable by Golang's
   [time.ParseDuration](https://pkg.go.dev/time#ParseDuration). Valid time
@@ -146,13 +158,15 @@ know the engineering unit of a tag.
 
 ## Behavior
 
-- **Startup:** If the device can't be reached when the collector starts, the
-  receiver logs a warning and starts anyway. It tries to reconnect on every scrape.
-- **Health check:** Each scrape first sends an EtherNet/IP `ListIdentity`
+- **Startup:** The receiver starts without connecting. It connects on the first
+  scrape, so an unreachable device does not block collector startup.
+- **Health check:** Each later scrape first sends an EtherNet/IP `ListIdentity`
   request, rather than relying on a cached connection state. If it fails, the
-  receiver tries to reconnect once.
+  receiver closes the connection, reconnects once and checks again.
 - **Device unreachable:** `ethernetip.device.up` is reported as `0`, no tag
-  values are emitted for that scrape, and every tag counts as failed.
+  values are emitted for that scrape, and every tag counts as failed. The
+  receiver waits out the `reconnect_on_failure` backoff before it connects
+  again.
 - **Tag read failure:** The tag is skipped and the remaining tags are still
   read. `ethernetip.device.up` stays `1`, since the device answered the poll.
 - **Scrape deadline:** When `timeout` is set and expires mid-scrape, the
@@ -169,6 +183,8 @@ know the engineering unit of a tag.
   `Error scraping metrics` entry listing them and counts them in
   `otelcol_scraper_errored_metric_points`, while the data points that were read
   are still emitted.
+- **Several receivers on one device:** Scrapes to the same `host` and `port`
+  are serialized across the collector, so receivers sharing a PLC take turns.
 - **Load on the device:** Tags are read one request at a time. Unsupported tag
   types cost up to three requests per scrape. Keep `collection_interval`
   conservative on production controllers.

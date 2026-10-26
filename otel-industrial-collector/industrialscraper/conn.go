@@ -159,10 +159,14 @@ func jitter(d time.Duration, factor float64) time.Duration {
 }
 
 // Close closes the connection; the next EnsureLive reconnects. Call it after a
-// transport error and on shutdown (it matches scraper.WithShutdown).
+// transport error and on shutdown (it matches scraper.WithShutdown). With
+// nothing open it does not call the Conn.
 func (s *Session) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.connected {
+		return nil
+	}
 	s.connected = false
 	return s.conn.Close(ctx)
 }

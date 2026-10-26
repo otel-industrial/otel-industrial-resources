@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"go.opentelemetry.io/collector/scraper/scrapererror"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
@@ -24,11 +25,13 @@ type fakeCIPClient struct {
 	readValues       map[string]float64
 	readErrs         map[string]error
 	disconnectCalled bool
+	connects         int
 	// onRead, if set, runs after each ReadTag call.
 	onRead func(tagName string)
 }
 
 func (f *fakeCIPClient) Connect() error {
+	f.connects++
 	if f.connectErr != nil {
 		f.connected = false
 		return f.connectErr
@@ -76,9 +79,7 @@ func newTestScraper(t *testing.T, client cipClient, tags []string) *ethernetipSc
 
 	settings := receivertest.NewNopSettings(metadata.Type)
 
-	s := newScraper(cfg, settings)
-	s.client = client
-	return s
+	return newScraperWithClient(cfg, settings, client)
 }
 
 func TestScrapeAllTagsSucceed(t *testing.T) {
@@ -111,6 +112,8 @@ func TestScrapeOneTagFailsOthersSucceed(t *testing.T) {
 		"device.up means the device answered, so a failed tag leaves it at 1")
 }
 
+// An unreachable device still emits ethernetip.device.up = 0, with every tag
+// counted as failed, and later scrapes back off instead of redialing.
 func TestScrapeDeviceDownSkipsTags(t *testing.T) {
 	client := &fakeCIPClient{connectErr: errors.New("connection refused")}
 	s := newTestScraper(t, client, []string{"TagA", "TagB"})
@@ -122,19 +125,43 @@ func TestScrapeDeviceDownSkipsTags(t *testing.T) {
 	assert.Equal(t, []float64{0}, gaugePoints(metrics, "ethernetip.device.up"))
 	assert.Empty(t, gaugePoints(metrics, "ethernetip.tag.value"))
 	assert.False(t, client.connected)
+
+	_, err = s.scrape(context.Background())
+	requirePartial(t, err, 2)
+	assert.ErrorContains(t, err, industrialscraper.ErrBackingOff.Error())
+	assert.Equal(t, 1, client.connects, "no redial inside the backoff window")
 }
 
 func TestScrapeDetectsMidRunDrop(t *testing.T) {
-	client := &fakeCIPClient{connected: true, pingErr: errors.New("connection reset")}
+	client := &fakeCIPClient{readValues: map[string]float64{"TagA": 1}}
 	s := newTestScraper(t, client, []string{"TagA"})
+	_, err := s.scrape(context.Background())
+	require.NoError(t, err)
 
-	// Reconnect also fails, simulating a fully dead device.
+	// The socket drops between scrapes, and the device is fully dead.
+	client.pingErr = errors.New("connection reset")
 	client.connectErr = errors.New("connection refused")
 
 	metrics, err := s.scrape(context.Background())
 	requirePartial(t, err, 1)
-	assert.Equal(t, 1, metrics.ResourceMetrics().Len())
-	assert.False(t, client.connected)
+	assert.Equal(t, []float64{0}, gaugePoints(metrics, "ethernetip.device.up"))
+	assert.True(t, client.disconnectCalled, "the dead connection is closed before redialing")
+}
+
+// Polls to one device are serialized process-wide.
+func TestScrapeWaitsForDeviceLimiter(t *testing.T) {
+	client := &fakeCIPClient{}
+	s := newTestScraper(t, client, []string{"TagA"})
+	s.cfg.Host = "limiter-test.invalid"
+	s.lim = industrialscraper.DeviceLimiter(s.endpoint())
+
+	require.NoError(t, s.lim.Acquire(context.Background()))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := s.scrape(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 0, client.connects)
+	s.lim.Release()
 }
 
 func TestScrapeStopsAtDeadline(t *testing.T) {
@@ -196,8 +223,10 @@ func TestNewScraperUsesRequestTimeout(t *testing.T) {
 }
 
 func TestShutdownDisconnects(t *testing.T) {
-	client := &fakeCIPClient{connected: true}
+	client := &fakeCIPClient{}
 	s := newTestScraper(t, client, []string{"TagA"})
+	_, err := s.scrape(context.Background())
+	require.NoError(t, err)
 
 	require.NoError(t, s.shutdown(context.Background()))
 	assert.True(t, client.disconnectCalled)
