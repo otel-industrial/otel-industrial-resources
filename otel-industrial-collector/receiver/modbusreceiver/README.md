@@ -225,6 +225,9 @@ such as timestamps or IDs in `name`.
 - **Connection lost during a poll:** The connection is closed, the remaining
   registers are skipped for that poll, and values already read are still
   emitted. The receiver reconnects on the next poll.
+- **Device busy (exception 06):** The device is overloaded, so the remaining
+  registers are skipped for that poll and later polls wait out the
+  `reconnect_on_failure` backoff. The connection stays open.
 - **Modbus exception or invalid response for one register:** For example an
   illegal data address, or a response too short for the `data_type`. The
   register is skipped, and the remaining registers are still read on the same

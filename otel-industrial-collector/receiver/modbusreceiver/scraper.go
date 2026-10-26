@@ -138,6 +138,13 @@ func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 			continue
 		}
 		err = fmt.Errorf("register %d (%s, %s): %w", reg.Address, reg.Type, reg.DataType, err)
+		if isDeviceBusy(err) {
+			// Busy is about the whole device: stop and back off, keeping the
+			// connection.
+			failures.AddN(len(s.cfg.Registers)-i, err)
+			s.sess.Backoff(err)
+			break
+		}
 		if !isTransportError(err) {
 			failures.Add(err)
 			continue
@@ -151,6 +158,13 @@ func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	}
 
 	return s.mb.Emit(), failures.Err()
+}
+
+// isDeviceBusy reports whether err is Modbus exception 06 (Server Device
+// Busy), which the device returns for every request while it is overloaded.
+func isDeviceBusy(err error) bool {
+	var mbErr *modbus.ModbusError
+	return errors.As(err, &mbErr) && mbErr.ExceptionCode == modbus.ExceptionCodeServerDeviceBusy
 }
 
 // isTransportError reports whether err means the connection is no longer usable.

@@ -47,6 +47,10 @@ type Session struct {
 	streakStart time.Time     // first failure of the current failure streak
 	interval    time.Duration // current backoff interval; 0 = no streak
 	nextAttempt time.Time
+	// probing is set on the first poll after a Backoff window; if no Backoff
+	// follows before the next poll, the device recovered and the backoff
+	// resets.
+	probing bool
 }
 
 func NewSession(conn Conn, backoff configretry.BackOffConfig) *Session {
@@ -65,6 +69,16 @@ func (s *Session) EnsureLive(ctx context.Context) error {
 
 	if !s.connected {
 		return s.connectLocked(ctx)
+	}
+	if s.now().Before(s.nextAttempt) {
+		return errors.Join(ErrBackingOff, s.lastErr)
+	}
+	if s.interval > 0 { // past a Backoff window
+		if s.probing {
+			s.interval, s.probing = 0, false
+		} else {
+			s.probing = true
+		}
 	}
 	p, canPing := s.conn.(Pinger)
 	if !canPing {
@@ -89,6 +103,18 @@ func (s *Session) EnsureLive(ctx context.Context) error {
 	return nil
 }
 
+// Backoff holds off polls to a device that reported it is overloaded (for
+// example Modbus exception 06, Server Device Busy). The connection stays open.
+// Backoff starts or, if the device is still busy on the first poll after the
+// window, grows the backoff.
+func (s *Session) Backoff(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastErr = err
+	s.probing = false
+	s.scheduleRetry()
+}
+
 // connectLocked dials unless inside a backoff window. s.mu must be held.
 func (s *Session) connectLocked(ctx context.Context) error {
 	if s.now().Before(s.nextAttempt) {
@@ -103,7 +129,7 @@ func (s *Session) connectLocked(ctx context.Context) error {
 		return err
 	}
 	s.connected = true
-	s.lastErr, s.interval, s.nextAttempt = nil, 0, time.Time{}
+	s.lastErr, s.interval, s.nextAttempt, s.probing = nil, 0, time.Time{}, false
 	return nil
 }
 

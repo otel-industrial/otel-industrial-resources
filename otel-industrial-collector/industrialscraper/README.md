@@ -31,6 +31,10 @@ scraperhelper leaves to each receiver:
   `RandomizationFactor` jitter, up to `MaxInterval`. Once a device has been
   down for `MaxElapsedTime`, every wait is `MaxInterval`. Reconnects never
   stop, and a successful connect resets the backoff.
+- `Backoff(err)` holds off polls to a connected device that reports it is
+  overloaded (for example Modbus exception 06, Server Device Busy). The
+  connection stays open, the window grows while the device stays busy on the
+  first poll after each window, and one clean poll resets it.
 - `Close` drops the connection. Call it after a transport error, and the next
   `EnsureLive` reconnects. It also matches `scraper.WithShutdown`.
 

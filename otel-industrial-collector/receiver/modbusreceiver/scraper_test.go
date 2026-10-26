@@ -339,6 +339,29 @@ func TestScrapeModbusExceptionKeepsConnection(t *testing.T) {
 	assert.Equal(t, 1, *dials, "an exception response must not force a reconnect")
 }
 
+// Exception 06 (Server Device Busy) is about the whole device, so the scan
+// stops and the next polls back off, keeping the connection.
+func TestScrapeDeviceBusyBacksOff(t *testing.T) {
+	cfg := testConfig(holding(0, DataTypeUint16), holding(1, DataTypeUint16), holding(2, DataTypeUint16))
+	reads := 0
+	dev := &fakeDevice{read: func(RegisterType, uint16, uint16) ([]byte, error) {
+		reads++
+		return nil, &modbus.ModbusError{FunctionCode: 3, ExceptionCode: modbus.ExceptionCodeServerDeviceBusy}
+	}}
+	s, dials := newTestScraper(cfg, dev)
+
+	md, err := s.scrape(context.Background())
+	requirePartial(t, err, 3)
+	assert.Equal(t, 0, md.DataPointCount())
+	assert.Equal(t, 1, reads, "the scan stops at a busy device")
+
+	_, err = s.scrape(context.Background())
+	require.ErrorIs(t, err, industrialscraper.ErrBackingOff)
+	assert.Equal(t, 1, reads, "no reads inside the backoff window")
+	assert.Equal(t, 1, *dials)
+	assert.Equal(t, 0, dev.closedCount(), "busy keeps the connection")
+}
+
 func TestScrapeShortResponseKeepsConnection(t *testing.T) {
 	cfg := testConfig(holding(0, DataTypeFloat32), holding(2, DataTypeUint16))
 	dev := &fakeDevice{read: func(kind RegisterType, address, quantity uint16) ([]byte, error) {

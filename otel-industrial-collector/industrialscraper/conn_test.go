@@ -198,6 +198,46 @@ func TestSessionBackoffMaxElapsedHoldsAtMaxInterval(t *testing.T) {
 	}
 }
 
+// Backoff on an open connection (a device reporting it is busy) keeps the
+// connection, holds off polls for the window, and grows while the device stays
+// busy. One clean poll after the window resets it.
+func TestSessionBackoffWhileConnected(t *testing.T) {
+	fc := &fakeConn{}
+	s, advance := newTestSession(fc, testBackOff())
+	ctx := context.Background()
+	busy := errors.New("server device busy")
+	if err := s.EnsureLive(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// expectWindow checks EnsureLive is held off for exactly d, then passes.
+	expectWindow := func(d time.Duration) {
+		t.Helper()
+		advance(d - time.Second)
+		if err := s.EnsureLive(ctx); !errors.Is(err, ErrBackingOff) || !errors.Is(err, busy) {
+			t.Fatalf("EnsureLive inside a %v window returned %v, want ErrBackingOff wrapping %v", d, err, busy)
+		}
+		advance(time.Second)
+		if err := s.EnsureLive(ctx); err != nil {
+			t.Fatalf("EnsureLive after a %v window returned %v, want nil", d, err)
+		}
+	}
+
+	s.Backoff(busy)
+	expectWindow(10 * time.Second)
+	s.Backoff(busy) // still busy on the first poll after the window
+	expectWindow(20 * time.Second)
+	if err := s.EnsureLive(ctx); err != nil { // a clean poll in between resets
+		t.Fatal(err)
+	}
+	s.Backoff(busy)
+	expectWindow(10 * time.Second)
+
+	if fc.connects != 1 || fc.closes != 0 {
+		t.Errorf("connects = %d, closes = %d, want 1 and 0 (busy keeps the connection)", fc.connects, fc.closes)
+	}
+}
+
 func TestSessionBackoffDisabledRedialsEveryTime(t *testing.T) {
 	fc := &fakeConn{connectErr: errors.New("down")}
 	b := testBackOff()
