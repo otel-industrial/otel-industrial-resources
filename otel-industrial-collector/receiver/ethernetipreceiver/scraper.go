@@ -2,11 +2,14 @@ package ethernetipreceiver
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/zap"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
@@ -43,6 +46,13 @@ func (s *ethernetipScraper) shutdown(_ context.Context) error {
 	return nil
 }
 
+// scrape reads every configured tag. Tags that were not read (failed reads,
+// tags skipped at the scrape deadline, or all tags when the device is
+// unreachable) are returned as a scrapererror.PartialScrapeError, so the
+// controller still emits the data points that were recorded, including
+// ethernetip.device.up, and counts the failures in
+// otelcol_scraper_errored_metric_points. device.up means "the device answered
+// this poll", so it stays 1 when individual tags fail.
 func (s *ethernetipScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	now := pcommon.NewTimestampFromTime(timeNow())
 
@@ -52,30 +62,34 @@ func (s *ethernetipScraper) scrape(ctx context.Context) (pmetric.Metrics, error)
 		// giving up on this cycle.
 		if connectErr := s.client.Connect(); connectErr != nil {
 			s.mb.RecordEthernetipDeviceUpDataPoint(now, 0)
-			s.settings.Logger.Warn("device unreachable, skipping tag reads this cycle",
-				zap.Error(connectErr))
-			return s.emit(), nil
+			return s.emit(), scrapererror.NewPartialScrapeError(
+				fmt.Errorf("device unreachable: %w", connectErr), len(s.cfg.Tags))
 		}
 	}
 
 	s.mb.RecordEthernetipDeviceUpDataPoint(now, 1)
 
+	var errs []error
+	failed := 0
 	for i, tagName := range s.cfg.Tags {
 		// The controller cancels ctx when the scrape `timeout` expires.
 		if err := ctx.Err(); err != nil {
-			s.settings.Logger.Warn("scrape deadline reached, skipping remaining tags",
-				zap.Int("skipped", len(s.cfg.Tags)-i), zap.Error(err))
+			errs = append(errs, fmt.Errorf("scrape stopped before tag %q: %w", tagName, err))
+			failed += len(s.cfg.Tags) - i
 			break
 		}
 		value, err := s.client.ReadTag(tagName)
 		if err != nil {
-			s.settings.Logger.Warn("failed to read tag, skipping",
-				zap.String("tag", tagName), zap.Error(err))
+			errs = append(errs, fmt.Errorf("tag %q: %w", tagName, err))
+			failed++
 			continue
 		}
 		s.mb.RecordEthernetipTagValueDataPoint(now, value, tagName)
 	}
 
+	if len(errs) > 0 {
+		return s.emit(), scrapererror.NewPartialScrapeError(errors.Join(errs...), failed)
+	}
 	return s.emit(), nil
 }
 

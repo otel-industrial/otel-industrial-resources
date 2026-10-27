@@ -45,7 +45,7 @@ be read today:
 
 Other types, including `REAL`, `SINT`, `INT`, `LINT`, the unsigned integer
 types, `STRING`, arrays and UDTs, are **not read** at this stage: the tag is
-logged as unreadable and skipped on each scrape.
+reported as a failed tag (see [Behavior](#behavior)) and skipped on each scrape.
 
 ## Prerequisites
 
@@ -135,7 +135,7 @@ In summary:
 
 | Metric | Type | Description |
 |---|---|---|
-| `ethernetip.device.up` | Gauge (int) | `1` if the device responded on the last scrape, otherwise `0`. |
+| `ethernetip.device.up` | Gauge (int) | `1` if the device responded on the last scrape, even if some tags failed, otherwise `0`. |
 | `ethernetip.tag.value` | Gauge (double) | Current value of each configured tag, with the `ethernetip.tag.name` attribute. |
 
 Every metric carries the `ethernetip.device.address` resource attribute, and
@@ -151,19 +151,24 @@ know the engineering unit of a tag.
 - **Health check:** Each scrape first sends an EtherNet/IP `ListIdentity`
   request, rather than relying on a cached connection state. If it fails, the
   receiver tries to reconnect once.
-- **Device unreachable:** `ethernetip.device.up` is reported as `0`, a warning
-  is logged, and no tag values are emitted for that scrape.
-- **Tag read failure:** The tag is logged at `warn` level and skipped, and the
-  remaining tags are still read. Tag failures are not reported as scrape errors.
+- **Device unreachable:** `ethernetip.device.up` is reported as `0`, no tag
+  values are emitted for that scrape, and every tag counts as failed.
+- **Tag read failure:** The tag is skipped and the remaining tags are still
+  read. `ethernetip.device.up` stays `1`, since the device answered the poll.
 - **Scrape deadline:** When `timeout` is set and expires mid-scrape, the
-  remaining tags are skipped with a warning, and the values already read are
-  still emitted. A request to a device that stops answering fails after
+  remaining tags are skipped and count as failed, and the values already read
+  are still emitted. A request to a device that stops answering fails after
   `request_timeout`. The deadline is checked between tags, so a tag read
   already in flight is not interrupted. Against a device that stops answering,
   one tag read can take up to about four times `request_timeout` (the client
   tries up to three data types and reconnects between them), so in the worst
   case a scrape takes `timeout` plus that. Without a `timeout`, every remaining
   tag in the scrape fails the same way, so set one when reading many tags.
+- **Reporting failed tags:** Failed and skipped tags are returned to the
+  collector as one partial scrape error per scrape. The collector logs one
+  `Error scraping metrics` entry listing them and counts them in
+  `otelcol_scraper_errored_metric_points`, while the data points that were read
+  are still emitted.
 - **Load on the device:** Tags are read one request at a time. Unsupported tag
   types cost up to three requests per scrape. Keep `collection_interval`
   conservative on production controllers.
