@@ -172,7 +172,10 @@ func TestScrapeWithUnreachableDeviceDoesNotPanic(t *testing.T) {
 	for range 2 {
 		require.NotPanics(t, func() {
 			md, _ := s.scrape(context.Background())
-			assert.Equal(t, 1, md.DataPointCount(), "only ethernetip.device.up")
+			if assert.Equal(t, 1, md.DataPointCount(), "only ethernetip.device.up") {
+				dp := md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Gauge().DataPoints().At(0)
+				assert.Equal(t, int64(0), dp.IntValue(), "device.up while unreachable")
+			}
 		})
 	}
 	require.NoError(t, s.shutdown(context.Background()))
