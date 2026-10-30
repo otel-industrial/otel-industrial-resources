@@ -72,7 +72,7 @@ var deviceLimiters sync.Map // device key -> *Limiter
 // address (e.g. "10.0.0.5:502"). It allows one poll at a time, so several
 // receivers pointed at the same PLC take turns instead of polling it at once.
 //
-// ponytail: fixed at one poll per device and never evicted; add a per-device
+// The limit is fixed at one poll per device and never evicted; add a per-device
 // max when a device is shown to tolerate parallel polls.
 func DeviceLimiter(key string) *Limiter {
 	l, _ := deviceLimiters.LoadOrStore(key, NewLimiter(1))
