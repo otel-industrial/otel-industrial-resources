@@ -23,6 +23,8 @@ func main() {
 			"testtag":     1.0,
 			"temperature": 68.0,
 			"pumpstatus":  int32(1),
+			"flowrate":    float32(12.5), // REAL
+			"pressure":    int16(1013),   // INT
 		},
 	}
 
@@ -52,6 +54,7 @@ func main() {
 			tags.Mutex.Lock()
 			tags.Data["temperature"] = 68.0 + 5*math.Sin(t)
 			tags.Data["testtag"] = 1.0 + 0.5*math.Cos(t)
+			tags.Data["flowrate"] = float32(12.5 + 0.5*math.Sin(t))
 			tags.Mutex.Unlock()
 		}
 	}()

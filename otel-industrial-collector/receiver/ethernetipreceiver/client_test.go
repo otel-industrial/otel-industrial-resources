@@ -59,18 +59,30 @@ func startTestServer(t *testing.T, tagData map[string]any) {
 	t.Fatal("test server did not become ready in time")
 }
 
-// TestClientAgainstRealServer covers the ReadTag type-fallback path and
+// TestClientAgainstRealServer covers ReadTag for each atomic type and
 // host/port handling against a single shared real gologix.Server instance
 // (the server's fixed ports and lack of clean shutdown make running more
 // than one instance per test binary unreliable).
 func TestClientAgainstRealServer(t *testing.T) {
+	// The server encodes each Go type as the matching CIP type. It has no Go
+	// type for USINT or ULINT; it sends byte as BYTE and uint64 as LWORD.
 	startTestServer(t, map[string]any{
-		"floattag": 3.14,
-		"inttag":   int32(42),
+		"lrealtag": 3.14,
+		"realtag":  float32(21.5),
+		"sinttag":  int8(-8),
+		"inttag":   int16(-1234),
+		"dinttag":  int32(42),
+		"linttag":  int64(-5_000_000_000),
+		"uinttag":  uint16(65535),
+		"udinttag": uint32(4_000_000_000),
+		"bytetag":  byte(200),
+		"lwordtag": uint64(1) << 40,
 		"booltag":  true,
+		"falsetag": false,
+		"strtag":   "hello",
 	})
 
-	t.Run("ReadTag type fallback", func(t *testing.T) {
+	t.Run("ReadTag atomic types", func(t *testing.T) {
 		client := newGologixClient("127.0.0.1", 44818, 2*time.Second)
 		require.NoError(t, client.Connect())
 
@@ -78,9 +90,18 @@ func TestClientAgainstRealServer(t *testing.T) {
 			tag  string
 			want float64
 		}{
-			{"floattag", 3.14},
-			{"inttag", 42},
+			{"lrealtag", 3.14},
+			{"realtag", 21.5},
+			{"sinttag", -8},
+			{"inttag", -1234},
+			{"dinttag", 42},
+			{"linttag", -5_000_000_000},
+			{"uinttag", 65535},
+			{"udinttag", 4_000_000_000},
+			{"bytetag", 200},
+			{"lwordtag", 1 << 40},
 			{"booltag", 1},
+			{"falsetag", 0},
 		}
 
 		for _, tt := range tests {
@@ -90,6 +111,16 @@ func TestClientAgainstRealServer(t *testing.T) {
 				require.InDelta(t, tt.want, got, 0.0001)
 			})
 		}
+	})
+
+	t.Run("ReadTag rejects non-atomic and missing tags", func(t *testing.T) {
+		client := newGologixClient("127.0.0.1", 44818, 2*time.Second)
+		require.NoError(t, client.Connect())
+
+		_, err := client.ReadTag("strtag")
+		assert.ErrorContains(t, err, `reading tag "strtag"`)
+		_, err = client.ReadTag("nosuchtag")
+		assert.ErrorContains(t, err, `reading tag "nosuchtag"`)
 	})
 
 	t.Run("host formats", func(t *testing.T) {
