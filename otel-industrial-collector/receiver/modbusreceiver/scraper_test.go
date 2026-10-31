@@ -119,6 +119,9 @@ func dataPoints(t *testing.T, md pmetric.Metrics) map[int64]pmetric.NumberDataPo
 		for j := 0; j < sms.Len(); j++ {
 			ms := sms.At(j).Metrics()
 			for k := 0; k < ms.Len(); k++ {
+				if ms.At(k).Name() == "modbus.device.up" {
+					continue // not a register value; see deviceUp
+				}
 				dps := ms.At(k).Gauge().DataPoints()
 				for l := 0; l < dps.Len(); l++ {
 					dp := dps.At(l)
@@ -130,6 +133,34 @@ func dataPoints(t *testing.T, md pmetric.Metrics) map[int64]pmetric.NumberDataPo
 		}
 	}
 	return out
+}
+
+// deviceUp returns the single modbus.device.up value in md and checks that it
+// carries the configured unit ID.
+func deviceUp(t *testing.T, md pmetric.Metrics) int64 {
+	t.Helper()
+	var values []int64
+	rms := md.ResourceMetrics()
+	for i := 0; i < rms.Len(); i++ {
+		sms := rms.At(i).ScopeMetrics()
+		for j := 0; j < sms.Len(); j++ {
+			ms := sms.At(j).Metrics()
+			for k := 0; k < ms.Len(); k++ {
+				if ms.At(k).Name() != "modbus.device.up" {
+					continue
+				}
+				dps := ms.At(k).Gauge().DataPoints()
+				for l := 0; l < dps.Len(); l++ {
+					unit, ok := dps.At(l).Attributes().Get("modbus.unit_id")
+					require.True(t, ok, "modbus.device.up without modbus.unit_id")
+					assert.Equal(t, int64(1), unit.Int())
+					values = append(values, dps.At(l).IntValue())
+				}
+			}
+		}
+	}
+	require.Len(t, values, 1, "expected exactly one modbus.device.up data point")
+	return values[0]
 }
 
 func TestScrapeDecodesDataTypes(t *testing.T) {
@@ -202,7 +233,7 @@ func TestScrapeGroupsDataPointsByMetric(t *testing.T) {
 	for i := 0; i < ms.Len(); i++ {
 		got[ms.At(i).Name()] = ms.At(i)
 	}
-	require.Len(t, got, 2)
+	require.Len(t, got, 3)
 
 	coil := got["modbus.coil.value"]
 	assert.Equal(t, "The value read from a Modbus coil or discrete input (0 or 1).", coil.Description())
@@ -211,6 +242,11 @@ func TestScrapeGroupsDataPointsByMetric(t *testing.T) {
 	reg := got["modbus.register.value"]
 	assert.Equal(t, "The decoded value read from a Modbus holding or input register.", reg.Description())
 	assert.Equal(t, 3, reg.Gauge().DataPoints().Len())
+
+	up := got["modbus.device.up"]
+	assert.Equal(t, "Whether the device responded to the last poll (1) or not (0).", up.Description())
+	require.Equal(t, 1, up.Gauge().DataPoints().Len())
+	assert.Equal(t, int64(1), up.Gauge().DataPoints().At(0).IntValue())
 }
 
 func TestScrapeRespectsMetricEnabled(t *testing.T) {
@@ -302,6 +338,7 @@ func TestScrapeTransportErrorMidScan(t *testing.T) {
 	assert.Contains(t, dps, int64(0))
 	assert.NotContains(t, dps, int64(1))
 	assert.NotContains(t, dps, int64(2))
+	assert.Equal(t, int64(0), deviceUp(t, md), "a transport error aborts the poll, so the device is down")
 	assert.Equal(t, 1, dev.closedCount(), "connection should be closed after a transport error")
 	assert.Nil(t, s.conn.client)
 
@@ -310,6 +347,7 @@ func TestScrapeTransportErrorMidScan(t *testing.T) {
 	md, err := s.scrape(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, dataPoints(t, md), 3)
+	assert.Equal(t, int64(1), deviceUp(t, md))
 	assert.Equal(t, 2, *dials, "scraper should redial after a transport error")
 }
 
@@ -331,6 +369,7 @@ func TestScrapeModbusExceptionKeepsConnection(t *testing.T) {
 	assert.Contains(t, dps, int64(0))
 	assert.NotContains(t, dps, int64(1))
 	assert.Contains(t, dps, int64(2))
+	assert.Equal(t, int64(1), deviceUp(t, md), "an exception means the device answered")
 	assert.Equal(t, 0, dev.closedCount())
 	assert.NotNil(t, s.conn.client)
 
@@ -352,11 +391,16 @@ func TestScrapeDeviceBusyBacksOff(t *testing.T) {
 
 	md, err := s.scrape(context.Background())
 	requirePartial(t, err, 3)
-	assert.Equal(t, 0, md.DataPointCount())
+	assert.Empty(t, dataPoints(t, md))
+	assert.Equal(t, int64(1), deviceUp(t, md), "a busy device answered, so it is up")
 	assert.Equal(t, 1, reads, "the scan stops at a busy device")
 
-	_, err = s.scrape(context.Background())
-	require.ErrorIs(t, err, industrialscraper.ErrBackingOff)
+	md, err = s.scrape(context.Background())
+	requirePartial(t, err, 3)
+	// PartialScrapeError does not unwrap, so check the message.
+	assert.ErrorContains(t, err, "device busy, holding off polls")
+	assert.ErrorContains(t, err, industrialscraper.ErrBackingOff.Error())
+	assert.Equal(t, int64(1), deviceUp(t, md), "holding off a busy device must not report it as down")
 	assert.Equal(t, 1, reads, "no reads inside the backoff window")
 	assert.Equal(t, 1, *dials)
 	assert.Equal(t, 0, dev.closedCount(), "busy keeps the connection")
@@ -395,13 +439,18 @@ func TestScrapeDialError(t *testing.T) {
 	}
 
 	md, err := s.scrape(context.Background())
-	require.ErrorIs(t, err, dialErr)
-	assert.Equal(t, 0, md.DataPointCount())
+	// A partial error, so the controller still emits device.up = 0.
+	requirePartial(t, err, 1)
+	// PartialScrapeError does not unwrap, so check the message.
+	assert.ErrorContains(t, err, "device unreachable: "+dialErr.Error())
+	assert.Empty(t, dataPoints(t, md))
+	assert.Equal(t, int64(0), deviceUp(t, md))
 
 	fail = false
 	md, err = s.scrape(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, 1, md.DataPointCount())
+	assert.Len(t, dataPoints(t, md), 1)
+	assert.Equal(t, int64(1), deviceUp(t, md))
 }
 
 // After a failed dial the scraper waits out the reconnect backoff instead of
@@ -417,11 +466,15 @@ func TestScrapeBacksOffAfterDialError(t *testing.T) {
 	}
 
 	_, err := s.scrape(context.Background())
-	require.ErrorIs(t, err, dialErr)
+	requirePartial(t, err, 1)
+	assert.ErrorContains(t, err, dialErr.Error())
 	md, err := s.scrape(context.Background())
-	require.ErrorIs(t, err, industrialscraper.ErrBackingOff)
-	require.ErrorIs(t, err, dialErr, "the backoff error should carry the last dial error for the log")
-	assert.Equal(t, 0, md.DataPointCount())
+	requirePartial(t, err, 1)
+	// PartialScrapeError does not unwrap, so check the message.
+	assert.ErrorContains(t, err, industrialscraper.ErrBackingOff.Error())
+	assert.ErrorContains(t, err, dialErr.Error(), "the backoff error should carry the last dial error for the log")
+	assert.Empty(t, dataPoints(t, md))
+	assert.Equal(t, int64(0), deviceUp(t, md), "a device in its reconnect backoff is down")
 	assert.Equal(t, 1, dials, "no dial inside the backoff window")
 }
 
@@ -514,7 +567,8 @@ func TestScrapeStopsWhenContextDone(t *testing.T) {
 	requirePartial(t, err, 2)
 	// PartialScrapeError does not unwrap, so check the message.
 	assert.ErrorContains(t, err, context.Canceled.Error())
-	assert.Equal(t, 1, md.DataPointCount(), "the register read before the deadline is still emitted")
+	assert.Len(t, dataPoints(t, md), 1, "the register read before the deadline is still emitted")
+	assert.Equal(t, int64(1), deviceUp(t, md), "the deadline is ours, the device did not fail")
 	assert.Equal(t, 0, dev.closedCount(), "a timed-out scan should keep the connection")
 }
 
