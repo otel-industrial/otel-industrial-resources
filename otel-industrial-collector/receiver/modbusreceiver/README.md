@@ -186,15 +186,18 @@ In summary:
 |---|---|---|
 | `modbus.register.value` | Gauge | Decoded value of a holding or input register. |
 | `modbus.coil.value` | Gauge (int) | `0` or `1` from a coil or discrete input. |
+| `modbus.device.up` | Gauge (int) | `1` if the device answered the last poll, otherwise `0`. |
 
-Both metrics carry `modbus.register_address`, `modbus.unit_id` and
+The two value metrics carry `modbus.register_address`, `modbus.unit_id` and
 `modbus.register_type` and `modbus.name` (an empty string when `name` is not
 configured).
 `modbus.register.value` also carries `modbus.data_type` and
 `modbus.byte_order`.
 
-Each metric is emitted once per scrape, with one data point per register.
-Either metric can be turned off with the standard mdatagen `metrics` setting:
+Each value metric is emitted once per scrape, with one data point per
+register. `modbus.device.up` has one data point per scrape, with the
+`modbus.unit_id` attribute, so a device that stops answering shows up as `0`
+that you can alert on. Any metric can be turned off with the standard mdatagen `metrics` setting:
 
 ```yaml
 receivers:
@@ -215,23 +218,26 @@ such as timestamps or IDs in `name`.
 
 - **Startup:** The receiver starts without connecting. It connects on the first
   poll, so an unreachable device does not block collector startup.
-- **Device unreachable:** The scrape fails, the collector logs one error for
-  it, and no metrics are emitted. The receiver waits out the
-  `reconnect_on_failure` backoff before it connects again. Polls inside the
-  backoff window fail without contacting the device.
+- **Device unreachable:** `modbus.device.up` is reported as `0`, no register
+  values are emitted, and every register counts as failed (see Reporting
+  failed registers). The receiver waits out the `reconnect_on_failure` backoff
+  before it connects again. Polls inside the backoff window report `0` without
+  contacting the device.
 - **Several receivers on one device:** Polls to the same `endpoint` are
   serialized across the collector, so receivers sharing a device or gateway
   take turns instead of polling it at once.
 - **Connection lost during a poll:** The connection is closed, the remaining
-  registers are skipped for that poll, and values already read are still
-  emitted. The receiver reconnects on the next poll.
+  registers are skipped for that poll, values already read are still
+  emitted, and `modbus.device.up` is `0`. The receiver reconnects on the next
+  poll.
 - **Device busy (exception 06):** The device is overloaded, so the remaining
   registers are skipped for that poll and later polls wait out the
-  `reconnect_on_failure` backoff. The connection stays open.
+  `reconnect_on_failure` backoff. The connection stays open, and
+  `modbus.device.up` stays `1`, since the device answered.
 - **Modbus exception or invalid response for one register:** For example an
   illegal data address, or a response too short for the `data_type`. The
-  register is skipped, and the remaining registers are still read on the same
-  connection.
+  register is skipped, the remaining registers are still read on the same
+  connection, and `modbus.device.up` stays `1`.
 - **Reporting failed registers:** When some registers fail, the values that
   were read are still emitted, and the failures are returned as one partial
   scrape error. The collector logs one error per scrape listing them, and
