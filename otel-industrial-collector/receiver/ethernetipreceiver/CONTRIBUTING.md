@@ -32,7 +32,8 @@ make clean   # remove build artifacts
 ## Running locally without hardware
 
 The repository includes an EtherNet/IP simulator that serves a few tags
-(`testtag`, `temperature`, `pumpstatus`) with slowly drifting values on the
+(`testtag`, `temperature`, `pumpstatus`, `flowrate` as `REAL`, `pressure` as
+`INT`) with slowly drifting values on the
 standard EtherNet/IP ports (`0.0.0.0:44818` TCP, `0.0.0.0:2222` UDP):
 
 ```bash
