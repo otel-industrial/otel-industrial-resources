@@ -2,95 +2,102 @@ package ethernetipreceiver
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net"
+	"strconv"
 
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/zap"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
+
+// cipConn adapts a cipClient to industrialscraper.Conn and Pinger, so the
+// shared Session pings the open connection (ListIdentity) before each scrape.
+type cipConn struct{ c cipClient }
+
+func (c cipConn) Connect(context.Context) error { return c.c.Connect() }
+func (c cipConn) Close(context.Context) error   { return c.c.Disconnect() }
+func (c cipConn) Ping(context.Context) error    { return c.c.Ping() }
 
 type ethernetipScraper struct {
 	cfg      *Config
 	settings receiver.Settings
 	mb       *metadata.MetricsBuilder
 	client   cipClient
+	sess     *industrialscraper.Session
+	lim      *industrialscraper.Limiter
 }
 
 func newScraper(cfg *Config, settings receiver.Settings) *ethernetipScraper {
-	return &ethernetipScraper{
+	return newScraperWithClient(cfg, settings, newGologixClient(cfg.Host, cfg.Port, cfg.RequestTimeout))
+}
+
+func newScraperWithClient(cfg *Config, settings receiver.Settings, client cipClient) *ethernetipScraper {
+	s := &ethernetipScraper{
 		cfg:      cfg,
 		settings: settings,
 		mb:       metadata.NewMetricsBuilder(cfg.MetricsBuilderConfig, settings),
-		client:   newGologixClient(cfg.Host, cfg.Port, cfg.RequestTimeout),
+		client:   client,
+		sess:     industrialscraper.NewSession(cipConn{client}, cfg.ReconnectOnFailure),
 	}
+	s.lim = industrialscraper.DeviceLimiter(s.endpoint())
+	return s
 }
 
-func (s *ethernetipScraper) start(_ context.Context, _ component.Host) error {
-	if err := s.client.Connect(); err != nil {
-		s.settings.Logger.Warn("initial connection to EtherNet/IP device failed, will retry on next scrape")
-	}
-	return nil
+// endpoint is the device address used to share one poll limiter across
+// receivers pointed at the same PLC.
+func (s *ethernetipScraper) endpoint() string {
+	return net.JoinHostPort(s.cfg.Host, strconv.FormatUint(uint64(s.cfg.Port), 10))
 }
 
-func (s *ethernetipScraper) shutdown(_ context.Context) error {
-	if err := s.client.Disconnect(); err != nil {
+func (s *ethernetipScraper) shutdown(ctx context.Context) error {
+	if err := s.sess.Close(ctx); err != nil {
 		s.settings.Logger.Warn("error disconnecting from EtherNet/IP device during shutdown",
 			zap.Error(err))
 	}
 	return nil
 }
 
-// scrape reads every configured tag. Tags that were not read (failed reads,
-// tags skipped at the scrape deadline, or all tags when the device is
-// unreachable) are returned as a scrapererror.PartialScrapeError, so the
-// controller still emits the data points that were recorded, including
-// ethernetip.device.up, and counts the failures in
-// otelcol_scraper_errored_metric_points. device.up means "the device answered
-// this poll", so it stays 1 when individual tags fail.
+// scrape reads every configured tag. The connection is opened on the first
+// scrape and checked with a ListIdentity ping before each later one. A device
+// that is down is redialed only after the reconnect_on_failure backoff, and
+// still reports ethernetip.device.up = 0. Failed and skipped tags are returned
+// as a scrapererror.PartialScrapeError; the values read are still emitted.
 func (s *ethernetipScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
-	now := pcommon.NewTimestampFromTime(timeNow())
-
-	if err := s.client.Ping(); err != nil {
-		// The device may have dropped between scrapes even though we
-		// previously connected successfully. Try a fresh connect before
-		// giving up on this cycle.
-		if connectErr := s.client.Connect(); connectErr != nil {
-			s.mb.RecordEthernetipDeviceUpDataPoint(now, 0)
-			return s.emit(), scrapererror.NewPartialScrapeError(
-				fmt.Errorf("device unreachable: %w", connectErr), len(s.cfg.Tags))
-		}
+	if err := s.lim.Acquire(ctx); err != nil {
+		return pmetric.NewMetrics(), err
 	}
+	defer s.lim.Release()
 
+	now := pcommon.NewTimestampFromTime(timeNow())
+	var failures industrialscraper.Failures
+
+	if err := s.sess.EnsureLive(ctx); err != nil {
+		s.mb.RecordEthernetipDeviceUpDataPoint(now, 0)
+		failures.AddN(len(s.cfg.Tags), fmt.Errorf("device unreachable: %w", err))
+		return s.emit(), failures.Err()
+	}
 	s.mb.RecordEthernetipDeviceUpDataPoint(now, 1)
 
-	var errs []error
-	failed := 0
 	for i, tagName := range s.cfg.Tags {
 		// The controller cancels ctx when the scrape `timeout` expires.
 		if err := ctx.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("scrape stopped before tag %q: %w", tagName, err))
-			failed += len(s.cfg.Tags) - i
+			failures.AddN(len(s.cfg.Tags)-i, fmt.Errorf("scrape stopped before tag %q: %w", tagName, err))
 			break
 		}
 		value, err := s.client.ReadTag(tagName)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("tag %q: %w", tagName, err))
-			failed++
+			failures.Add(fmt.Errorf("tag %q: %w", tagName, err))
 			continue
 		}
 		s.mb.RecordEthernetipTagValueDataPoint(now, value, tagName)
 	}
 
-	if len(errs) > 0 {
-		return s.emit(), scrapererror.NewPartialScrapeError(errors.Join(errs...), failed)
-	}
-	return s.emit(), nil
+	return s.emit(), failures.Err()
 }
 
 func (s *ethernetipScraper) emit() pmetric.Metrics {

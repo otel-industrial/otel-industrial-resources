@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/collector/scraper"
 	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
@@ -28,6 +29,7 @@ func createDefaultConfig() component.Config {
 		MetricsBuilderConfig: metadata.NewDefaultMetricsBuilderConfig(),
 		RequestTimeout:       5 * time.Second,
 		Port:                 44818,
+		ReconnectOnFailure:   industrialscraper.DefaultBackOffConfig(),
 	}
 }
 
@@ -41,7 +43,7 @@ func createMetricsReceiver(
 
 	s := newScraper(rCfg, settings)
 
-	scrp, err := scraper.NewMetrics(s.scrape, scraper.WithStart(s.start), scraper.WithShutdown(s.shutdown))
+	scrp, err := scraper.NewMetrics(s.scrape, scraper.WithShutdown(s.shutdown))
 	if err != nil {
 		return nil, err
 	}

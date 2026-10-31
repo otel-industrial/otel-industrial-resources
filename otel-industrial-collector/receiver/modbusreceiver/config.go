@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver/internal/metadata"
@@ -59,31 +60,6 @@ const (
 	ByteOrderCDAB ByteOrder = "CDAB"
 )
 
-// reorder rearranges raw Modbus bytes according to the byte order.
-func (bo ByteOrder) reorder(raw []byte) []byte {
-	out := make([]byte, len(raw))
-	switch bo {
-	case ByteOrderABCD:
-		copy(out, raw)
-	case ByteOrderDCBA:
-		for i, b := range raw {
-			out[len(raw)-1-i] = b
-		}
-	case ByteOrderBADC:
-		for i := 0; i+1 < len(raw); i += 2 {
-			out[i] = raw[i+1]
-			out[i+1] = raw[i]
-		}
-	case ByteOrderCDAB:
-		for i := 0; i+1 < len(raw); i += 2 {
-			j := len(raw) - 2 - i
-			out[i] = raw[j]
-			out[i+1] = raw[j+1]
-		}
-	}
-	return out
-}
-
 // RegisterDefinition describes a single logical value to read from a Modbus device.
 type RegisterDefinition struct {
 	Address   uint16       `mapstructure:"address"`
@@ -114,6 +90,10 @@ type Config struct {
 	// RequestTimeout bounds connecting and each individual Modbus request.
 	RequestTimeout time.Duration        `mapstructure:"request_timeout"`
 	Registers      []RegisterDefinition `mapstructure:"registers"`
+
+	// ReconnectOnFailure is the backoff between reconnects to a device that
+	// is down.
+	ReconnectOnFailure configretry.BackOffConfig `mapstructure:"reconnect_on_failure"`
 }
 
 // Validate checks the configuration for required fields and valid values.

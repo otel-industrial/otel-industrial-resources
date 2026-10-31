@@ -166,9 +166,9 @@ func TestScrapeWithUnreachableDeviceDoesNotPanic(t *testing.T) {
 	cfg.Port = closedPort(t)
 	cfg.RequestTimeout = 200 * time.Millisecond
 	cfg.Tags = []string{"TagA"}
+	cfg.ReconnectOnFailure.Enabled = false // dial on every scrape
 
 	s := newScraper(cfg, receivertest.NewNopSettings(metadata.Type))
-	require.NoError(t, s.start(context.Background(), nil))
 	for range 2 {
 		require.NotPanics(t, func() {
 			md, _ := s.scrape(context.Background())

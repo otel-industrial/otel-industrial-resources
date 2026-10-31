@@ -20,6 +20,11 @@ receivers:
     # Connect and per-request Modbus TCP timeout.
     request_timeout: 5s
 
+    # Backoff between reconnects to a device that is down.
+    reconnect_on_failure:
+      initial_interval: 10s
+      max_interval: 60s
+
     # List of registers to poll. Adjust addresses, types, and data types
     # to match your device's register map (usually in the device manual).
     registers:

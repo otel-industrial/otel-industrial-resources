@@ -29,6 +29,8 @@ The first implementation milestone is a read-only, single-device scraper that va
 - **Tag type handling.** CIP tags carry their type on the wire, but `gologix.Read` only succeeds when the Go destination type matches the tag's CIP type exactly. `ReadTag` currently probes `float64` (LREAL), then `int32` (DINT), then `bool` (BOOL), so other atomic types — notably REAL (32-bit float), SINT, INT, LINT and the unsigned types — are not read today, and each unsupported read costs up to three round-trips. The fix is to read the tag once and convert based on the type the controller reports (or learn types up front via tag discovery); see Roadmap.
 - **OT network safety.** Polling behavior (frequency, request pacing, connection handling) should be designed conservatively to avoid impacting devices that may be sensitive to unexpected load. Connection health is verified actively each cycle rather than trusted from a cached flag, so a dropped connection is detected promptly rather than silently reporting stale "up" status.
 
+- **Shared connection handling.** The connection, the `ListIdentity` health check, the reconnect backoff, the per-device poll limit and partial scrape errors come from the shared `industrialscraper` module, so they behave the same as in the Modbus receiver.
+
 ## Roadmap
 
 The current implementation is a deliberately narrow v1: one device, a fixed tag list, Rockwell-only tag-based access. The items below are follow-up milestones, not commitments with dates — feedback and contributions on any of these are welcome.

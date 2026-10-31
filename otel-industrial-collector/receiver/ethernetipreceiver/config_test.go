@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 
+	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper"
 	"github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver/internal/metadata"
 )
 
@@ -84,6 +85,7 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, uint(44818), cfg.Port)
 		assert.Empty(t, cfg.DeviceName)
 		assert.Equal(t, 5*time.Second, cfg.RequestTimeout)
+		assert.Equal(t, industrialscraper.DefaultBackOffConfig(), cfg.ReconnectOnFailure)
 		assert.Equal(t, time.Duration(0), cfg.Timeout)
 		assert.Equal(t, time.Minute, cfg.CollectionInterval)
 		assert.Equal(t, time.Second, cfg.InitialDelay)
@@ -100,6 +102,9 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, "line1-plc", cfg.DeviceName)
 		assert.Equal(t, []string{"temperature", "pumpstatus", "flow_rate"}, cfg.Tags)
 		assert.Equal(t, 2*time.Second, cfg.RequestTimeout)
+		assert.Equal(t, 15*time.Second, cfg.ReconnectOnFailure.InitialInterval)
+		assert.Equal(t, 2*time.Minute, cfg.ReconnectOnFailure.MaxInterval)
+		assert.Equal(t, 10*time.Minute, cfg.ReconnectOnFailure.MaxElapsedTime)
 		assert.Equal(t, 20*time.Second, cfg.Timeout)
 		assert.Equal(t, 30*time.Second, cfg.CollectionInterval)
 		assert.Equal(t, 5*time.Second, cfg.InitialDelay)
