@@ -109,3 +109,11 @@ update-sparkplug:
 .PHONY: update-opcua
 update-opcua:
 	bash .github/scripts/update-module.sh github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua $(VERSION)
+
+# Runs update-otel, then moves the OPC UA and Sparkplug receivers to their
+# latest commits.
+#   make update-deps OTEL_VERSION=0.164.0 OTEL_STABLE_VERSION=1.70.0 OTEL_CONTRIB_VERSION=0.164.1
+.PHONY: update-deps
+update-deps: update-otel
+	$(MAKE) update-opcua VERSION=
+	$(MAKE) update-sparkplug VERSION=

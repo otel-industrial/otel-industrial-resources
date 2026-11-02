@@ -44,6 +44,8 @@ worktree.
    `.github/scripts/check-otel-versions.sh`. Move the receivers from outside
    OTel to their latest commit with `make update-opcua` and
    `make update-sparkplug`, or pin one with `VERSION=<tag, branch, or commit>`.
+   `make update-deps` runs all three, taking the same `OTEL_*` variables as
+   `update-otel`.
    `prepare-release` only changes this repo's version.
 2. Create a branch and run, with the current version from `versions.yaml` as
    `PREVIOUS_VERSION`:
