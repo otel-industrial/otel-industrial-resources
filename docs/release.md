@@ -41,9 +41,10 @@ worktree.
 
    This updates the in-repo `go.mod` files, the manifests and builder
    configs, the OCB version, and the docs, then runs
-   `.github/scripts/check-otel-versions.sh`. Bump the modules from outside OTel
-   (the OPC UA and Sparkplug receivers) by hand. `prepare-release` only changes
-   this repo's version.
+   `.github/scripts/check-otel-versions.sh`. Move the receivers from outside
+   OTel to their latest commit with `make update-opcua` and
+   `make update-sparkplug`, or pin one with `VERSION=<tag, branch, or commit>`.
+   `prepare-release` only changes this repo's version.
 2. Create a branch and run, with the current version from `versions.yaml` as
    `PREVIOUS_VERSION`:
 
