@@ -16,3 +16,7 @@ Ideas, use cases, requirements, and feedback are welcome.
 If you have an idea, requirement, or use case that could help shape the future direction of this project, please open an issue to start a discussion.
 
 As the project evolves, contributions in the form of documentation, reference configurations, and code will be welcome.
+
+## Releasing
+
+The Go modules here are versioned and released together. See [docs/release.md](../docs/release.md).

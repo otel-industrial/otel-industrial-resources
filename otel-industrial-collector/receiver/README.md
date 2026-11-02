@@ -16,3 +16,5 @@ The goal is to make it easy to find existing work on a given protocol before sta
 ## Contributing
 
 If you know of an OpenTelemetry receiver, exporter, or other component relevant to industrial protocols that isn't listed here, please open an issue or a PR adding it. A short pointer README with a link to the external project is enough — the implementation doesn't need to live in this repository.
+
+A receiver that lives in this repository also needs its module in `versions.yaml` and in at least one manifest, or CI fails. See "Adding a module" in [docs/release.md](../../docs/release.md).

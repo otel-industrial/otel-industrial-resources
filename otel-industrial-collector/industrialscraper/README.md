@@ -130,5 +130,6 @@ invent divergent names. Provisional pending issue #11 (see Status).
 
 Consumed as a versioned Go submodule in this repo, pinned to a
 path-prefixed tag (for example
-`otel-industrial-collector/industrialscraper/v0.1.0`), the same scheme the
-EtherNet/IP receiver uses.
+`otel-industrial-collector/industrialscraper/v0.1.0`). It is versioned in
+lockstep with every other module in the repo; see
+[docs/release.md](../../docs/release.md).
