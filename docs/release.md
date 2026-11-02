@@ -16,9 +16,12 @@ pinned in `internal/tools/go.mod` and run through the root `Makefile`.
 
 Add its module path to the `industrial` set in `versions.yaml`. Modules in
 this repo require each other at the set version and keep a `replace` to the
-local path. A manifest
-that uses an in-repo module lists it, and every in-repo module it depends on,
-under `replaces:`.
+local path. A manifest that uses an in-repo module lists it, and every
+in-repo module it depends on, under `replaces:`. Every receiver, processor,
+exporter, extension, or connector module must be in at least one manifest.
+CI enforces all of this with `multimod verify` and
+`.github/scripts/check-release-coverage.sh`, and `excluded-modules` is limited
+to the modules that script allows.
 
 ## Preparing a release
 
