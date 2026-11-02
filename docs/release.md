@@ -50,12 +50,11 @@ worktree.
 
 ## Tagging
 
-multimod creates signed tags, so the releaser needs a git signing key. From an
-up-to-date `main` at the merged release commit:
+From an up-to-date `main` at the merged release commit:
 
 ```sh
 make push-tags COMMIT=<release commit>
-git tag -s v0.2.0 <release commit> -m v0.2.0
+git tag -a v0.2.0 <release commit> -m v0.2.0
 git push origin v0.2.0
 ```
 

@@ -32,13 +32,15 @@ multimod-prerelease: clean-dists
 
 COMMIT ?= HEAD
 REMOTE ?= git@github.com:otel-industrial/otel-industrial-resources.git
+# Tags every module in the set at COMMIT. This uses git directly, since
+# `multimod tag` always creates GPG-signed tags.
 .PHONY: push-tags
 push-tags: clean-dists
 	$(GO_TOOL) multimod verify
-	set -e; for tag in `$(GO_TOOL) multimod tag -m $(MODSET) -c $(COMMIT) --print-tags | grep -v "Using"`; do \
-		echo "pushing tag $${tag}"; \
-		git push $(REMOTE) $${tag}; \
-	done
+	set -e; version=`sed -n 's/^    version: //p' versions.yaml`; \
+	tags=`sed -n "s#^      - github.com/otel-industrial/otel-industrial-resources/\(.*\)#\1/$${version}#p" versions.yaml`; \
+	for tag in $${tags}; do git tag -a -m "$${tag}" "$${tag}" $(COMMIT); done; \
+	for tag in $${tags}; do echo "pushing tag $${tag}"; git push $(REMOTE) "$${tag}"; done
 
 .PHONY: check-changes
 check-changes:
