@@ -1,3 +1,4 @@
 # OCB build output
 otelcol-*/
 _build/
+.*.local.yaml

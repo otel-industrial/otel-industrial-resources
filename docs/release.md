@@ -16,12 +16,16 @@ pinned in `internal/tools/go.mod` and run through the root `Makefile`.
 
 Add its module path to the `industrial` set in `versions.yaml`. Modules in
 this repo require each other at the set version and keep a `replace` to the
-local path. A manifest that uses an in-repo module lists it, and every
-in-repo module it depends on, under `replaces:`. Every receiver, processor,
-exporter, extension, or connector module must be in at least one manifest.
-CI enforces all of this with `multimod verify` and
-`.github/scripts/check-release-coverage.sh`, and `excluded-modules` is limited
-to the modules that script allows.
+local path. Every receiver, processor, exporter, extension, or connector
+module must be in at least one manifest, pinned at the set version, and every
+manifest's `dist.version` is the set version. CI enforces all of this with
+`multimod verify` and `.github/scripts/check-release-coverage.sh`, and
+`excluded-modules` is limited to the modules that script allows.
+
+The manifests pin the in-repo modules by tag, with no `replaces:`, so they
+build on their own outside this repo. CI builds them with `make LOCAL=1`, which
+adds replaces for every in-repo module, so a PR builds against the code in the
+checkout.
 
 ## Preparing a release
 
@@ -56,6 +60,7 @@ git push origin v0.2.0
 ```
 
 `push-tags` tags every module in the set (for example
-`otel-industrial-collector/receiver/modbusreceiver/v0.2.0`). The repo tag
-starts the `release` workflow, which builds the distributions and creates a
-draft GitHub release. Review the draft and publish it.
+`otel-industrial-collector/receiver/modbusreceiver/v0.2.0`). Push them before
+the repo tag. The repo tag starts the `release` workflow, which builds the
+distributions from the module tags, as anyone using the manifests would, and
+creates a draft GitHub release. Review the draft and publish it.

@@ -28,16 +28,19 @@ while read -r m; do
   fail=1
 done < <(sed -n '/^module-sets:/,/^excluded-modules:/ s/^      - //p' versions.yaml)
 
-# A manifest replaces each in-repo module it uses, and each in-repo module those
-# require, so a release builds them from the tagged commit.
+# Every manifest carries the set version, as dist.version and on each in-repo
+# module, so prepare-release moves them all together.
+version=$(sed -n 's/^    version: v//p' versions.yaml)
 for f in "${manifests[@]}"; do
-  for m in $(sed -n "s#^  - gomod: \($repo/[^ ]*\) .*#\1#p" "$f"); do
-    for dep in "$m" $(sed -n "s#^\t\($repo/[^ ]*\) .*#\1#p" "${m#"$repo/"}/go.mod"); do
-      grep -q "^  - $dep => " "$f" && continue
-      echo "$f: add a replaces entry for $dep"
-      fail=1
-    done
-  done
+  grep -q "^  version: $version$" "$f" || {
+    echo "$f: set dist.version to $version"
+    fail=1
+  }
+  while read -r m v; do
+    [ "$v" = "v$version" ] && continue
+    echo "$f: $m is at $v; use v$version"
+    fail=1
+  done < <(sed -n "s#^  - gomod: \($repo/[^ ]*\) \([^ ]*\).*#\1 \2#p" "$f")
 done
 
 exit $fail

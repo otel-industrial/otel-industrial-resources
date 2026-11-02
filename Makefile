@@ -5,7 +5,7 @@ TOOLS_MOD_DIR := $(CURDIR)/internal/tools
 # The repo root has no go.mod, so run tools from the tools module directory.
 GO_TOOL       := go -C $(TOOLS_MOD_DIR) tool
 
-ALL_MODULES := $(shell find . -type f -name go.mod -not -path './internal/tools/*' -exec dirname {} \; | sort)
+ALL_MODULES := $(shell find . -type f -name go.mod -not -path './internal/tools/*' -not -path './otel-industrial-collector/manifests/*' -exec dirname {} \; | sort)
 
 MODSET ?= industrial
 
@@ -16,19 +16,24 @@ gotidy:
 		(cd "$${dir}" && go mod tidy); \
 	done
 
+# multimod treats every go.mod on disk as a module, including OCB build output.
+.PHONY: clean-dists
+clean-dists:
+	$(MAKE) -C otel-industrial-collector/manifests clean
+
 .PHONY: multimod-verify
-multimod-verify:
+multimod-verify: clean-dists
 	$(GO_TOOL) multimod verify
 
 .PHONY: multimod-prerelease
-multimod-prerelease:
+multimod-prerelease: clean-dists
 	$(GO_TOOL) multimod prerelease -s=true -b=false -v $(CURDIR)/versions.yaml -m $(MODSET)
 	$(MAKE) gotidy
 
 COMMIT ?= HEAD
 REMOTE ?= git@github.com:otel-industrial/otel-industrial-resources.git
 .PHONY: push-tags
-push-tags:
+push-tags: clean-dists
 	$(GO_TOOL) multimod verify
 	set -e; for tag in `$(GO_TOOL) multimod tag -m $(MODSET) -c $(COMMIT) --print-tags | grep -v "Using"`; do \
 		echo "pushing tag $${tag}"; \
