@@ -91,3 +91,10 @@ endif
 	$(MAKE) multimod-prerelease
 	git add .
 	git commit -m "add multimod changes $(RELEASE_CANDIDATE)" || (echo "no multimod changes to commit")
+
+# Bumps the OTel collector core and contrib modules everywhere to one upstream
+# release. OTEL_CONTRIB_VERSION defaults to OTEL_VERSION.
+#   make update-otel OTEL_VERSION=0.164.0 OTEL_STABLE_VERSION=1.70.0 OTEL_CONTRIB_VERSION=0.164.1
+.PHONY: update-otel
+update-otel:
+	bash .github/scripts/update-otel.sh $(OTEL_VERSION) $(OTEL_STABLE_VERSION) $(OTEL_CONTRIB_VERSION)
