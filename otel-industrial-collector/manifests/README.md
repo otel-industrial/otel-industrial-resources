@@ -97,4 +97,4 @@ Two receivers are referenced by commit pseudo-version rather than a release tag,
 - OPC UA: the module lives in a subdirectory, so the repo's root `v0.x` tags don't apply to its path.
 - Sparkplug: untagged.
 
-These pins point at a specific commit and will drift over time. Re-resolve them (and the tagged EtherNet/IP and Modbus versions) when refreshing against a newer collector release.
+These pins point at a specific commit and will drift over time. `make update-opcua` and `make update-sparkplug` at the repo root move them to the latest commit, or to `VERSION=<tag, branch, or commit>`.

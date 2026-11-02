@@ -98,3 +98,14 @@ endif
 .PHONY: update-otel
 update-otel:
 	bash .github/scripts/update-otel.sh $(OTEL_VERSION) $(OTEL_STABLE_VERSION) $(OTEL_CONTRIB_VERSION)
+
+# Moves an out-of-OTel receiver's manifest pin to its latest commit, or to
+# VERSION (a tag, branch, or commit).
+#   make update-sparkplug [VERSION=<ref>]
+.PHONY: update-sparkplug
+update-sparkplug:
+	bash .github/scripts/update-module.sh github.com/jmacd/opentelemetry-mqtt-sparkplug $(VERSION)
+
+.PHONY: update-opcua
+update-opcua:
+	bash .github/scripts/update-module.sh github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua $(VERSION)
