@@ -90,7 +90,7 @@ OCB cannot merge or include one manifest from another. It takes a single `--conf
 
 ## Versions
 
-All manifests pin collector **0.163.0** (stable modules **1.69.0**). Keep the builder version, `otelcol_version`, and the core component versions in step when you bump.
+All manifests pin collector **0.163.0** (stable modules **1.69.0**). `make update-otel` at the repo root bumps all of them together, and CI fails when they differ. See [docs/release.md](../../docs/release.md).
 
 Two receivers are referenced by commit pseudo-version rather than a release tag, because their modules are untagged or tagged in a way Go cannot resolve for their path:
 

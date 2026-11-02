@@ -32,10 +32,18 @@ checkout.
 Run these in a regular clone. multimod cannot read the git state of a linked
 worktree.
 
-1. Bump any external modules in the manifests by hand: the collector core and
-   contrib components (`v0.163.0`, `v1.69.0`, `otelcol_version`, and the OCB
-   version in the workflows and Makefiles), and the out-of-repo receivers
-   (OPC UA, Sparkplug). `prepare-release` only changes this repo's version.
+1. Bump the OTel collector core and contrib modules to the upstream release
+   you are building against, and commit the result:
+
+   ```sh
+   make update-otel OTEL_VERSION=0.164.0 OTEL_STABLE_VERSION=1.70.0 OTEL_CONTRIB_VERSION=0.164.1
+   ```
+
+   This updates the in-repo `go.mod` files, the manifests and builder
+   configs, the OCB version, and the docs, then runs
+   `.github/scripts/check-otel-versions.sh`. Bump the modules from outside OTel
+   (the OPC UA and Sparkplug receivers) by hand. `prepare-release` only changes
+   this repo's version.
 2. Create a branch and run, with the current version from `versions.yaml` as
    `PREVIOUS_VERSION`:
 
