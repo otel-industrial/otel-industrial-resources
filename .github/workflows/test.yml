@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
+      - name: Verify versions.yaml
+        run: make multimod-verify
       # Multi-module repo: test/vet/fmt every module. `go test ./...` does not
       # cross module boundaries, and `find -execdir` hides a failing command's
       # exit code, so loop explicitly and fail if any module fails. Module
@@ -35,7 +37,7 @@ jobs:
               { test -z "$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; false; }; } &&
               go test ./...
             ) || fail=1
-          done < <(find . -name go.mod -not -path '*/vendor/*')
+          done < <(find . -name go.mod -not -path '*/vendor/*' -not -path './internal/tools/*')
           exit $fail
       # mdatagen output is committed. Regenerate every component that has a
       # metadata.yaml with the mdatagen pinned in
