@@ -45,7 +45,8 @@ worktree.
    OTel to their latest commit with `make update-opcua` and
    `make update-sparkplug`, or pin one with `VERSION=<tag, branch, or commit>`.
    `make update-deps` runs all three, taking the same `OTEL_*` variables as
-   `update-otel`.
+   `update-otel`. It always moves OPC UA and Sparkplug to their latest commits,
+   so use the single targets to pin either one.
    `prepare-release` only changes this repo's version.
 2. Create a branch and run, with the current version from `versions.yaml` as
    `PREVIOUS_VERSION`:
