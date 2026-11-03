@@ -74,31 +74,50 @@ func (c *gologixClient) Ping() error {
 	return nil
 }
 
-// ReadTag reads a single tag and returns its value as a float64.
-//
-// This is a simplification for the initial implementation: gologix.Read
-// requires a destination matching the tag's underlying CIP type, so we
-// try the common numeric types in order until one succeeds. A later
-// milestone should read the tag's actual type via ListAllTags/discovery
-// instead of guessing.
+// ReadTag reads a single tag with one request and returns its value as a
+// float64. gologix decodes the value by the CIP type the controller reports,
+// so any atomic type can be read without knowing it in advance.
 func (c *gologixClient) ReadTag(tagName string) (float64, error) {
-	var f64 float64
-	if err := c.client.Read(tagName, &f64); err == nil {
-		return f64, nil
+	v, err := c.client.Read_single(tagName, gologix.CIPTypeUnknown, 1)
+	if err != nil {
+		return 0, fmt.Errorf("reading tag %q: %w", tagName, err)
 	}
-
-	var i32 int32
-	if err := c.client.Read(tagName, &i32); err == nil {
-		return float64(i32), nil
+	f, ok := toFloat64(v)
+	if !ok {
+		return 0, fmt.Errorf("reading tag %q: unsupported type %T, only atomic types can be read", tagName, v)
 	}
+	return f, nil
+}
 
-	var b bool
-	if err := c.client.Read(tagName, &b); err == nil {
-		if b {
-			return 1, nil
+// toFloat64 converts a decoded atomic CIP value. Structs, strings and arrays
+// arrive as other Go types and are rejected.
+func toFloat64(v any) (float64, bool) {
+	switch x := v.(type) {
+	case bool:
+		if x {
+			return 1, true
 		}
-		return 0, nil
+		return 0, true
+	case int8:
+		return float64(x), true
+	case uint8:
+		return float64(x), true
+	case int16:
+		return float64(x), true
+	case uint16:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case uint32:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case uint64:
+		return float64(x), true
+	case float32:
+		return float64(x), true
+	case float64:
+		return x, true
 	}
-
-	return 0, fmt.Errorf("reading tag %q: unsupported or unreadable type", tagName)
+	return 0, false
 }
