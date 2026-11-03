@@ -74,10 +74,13 @@ type modbusScraper struct {
 	sess *industrialscraper.Session
 	lim  *industrialscraper.Limiter
 
-	// mu guards the connection and mb, which accumulates data points
+	// mu guards the connection, busy and mb, which accumulates data points
 	// between Emit calls.
 	mu sync.Mutex
 	mb *metadata.MetricsBuilder
+	// busy is set when the device answered with exception 06 (Server Device
+	// Busy). While the session holds off polls, the device is still up.
+	busy bool
 }
 
 func newModbusScraper(cfg *Config, settings receiver.Settings, dial dialFunc) *modbusScraper {
@@ -112,6 +115,12 @@ func (s *modbusScraper) shutdown(ctx context.Context) error {
 //
 // Metrics collected before a failure are still returned, together with a
 // scrapererror.PartialScrapeError counting the registers that were not read.
+//
+// Every scrape that reaches the device also records modbus.device.up: 0 when
+// the device cannot be reached (connect failure, reconnect backoff, or a
+// transport error mid-scan), otherwise 1. Modbus exceptions, decode errors,
+// the scrape deadline and a busy device leave it at 1, since the device
+// answered.
 func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	if err := s.lim.Acquire(ctx); err != nil {
 		return pmetric.NewMetrics(), err
@@ -121,13 +130,27 @@ func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.sess.EnsureLive(ctx); err != nil {
-		return pmetric.NewMetrics(), err
-	}
-
 	now := pcommon.NewTimestampFromTime(time.Now())
+	unitID := int64(s.cfg.UnitID)
 
 	var failures industrialscraper.Failures
+	if err := s.sess.EnsureLive(ctx); err != nil {
+		// A partial (not plain) error makes the controller still emit
+		// device.up, with every register counted as failed.
+		if s.busy && errors.Is(err, industrialscraper.ErrBackingOff) {
+			// Holding off a busy device: it answered the last poll.
+			s.mb.RecordModbusDeviceUpDataPoint(now, 1, unitID)
+			failures.AddN(len(s.cfg.Registers), fmt.Errorf("device busy, holding off polls: %w", err))
+			return s.mb.Emit(), failures.Err()
+		}
+		s.busy = false
+		s.mb.RecordModbusDeviceUpDataPoint(now, 0, unitID)
+		failures.AddN(len(s.cfg.Registers), fmt.Errorf("device unreachable: %w", err))
+		return s.mb.Emit(), failures.Err()
+	}
+	s.busy = false
+
+	up := int64(1)
 	for i, reg := range s.cfg.Registers {
 		if err := ctx.Err(); err != nil {
 			failures.AddN(len(s.cfg.Registers)-i, fmt.Errorf("scan stopped at register %d: %w", reg.Address, err))
@@ -143,6 +166,7 @@ func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 			// connection.
 			failures.AddN(len(s.cfg.Registers)-i, err)
 			s.sess.Backoff(err)
+			s.busy = true
 			break
 		}
 		if !isTransportError(err) {
@@ -151,12 +175,14 @@ func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 		}
 		// This register and every one after it in the scan were not read.
 		failures.AddN(len(s.cfg.Registers)-i, err)
+		up = 0
 		if cerr := s.sess.Close(ctx); cerr != nil {
 			s.conn.logger.Debug("Error closing Modbus connection", zap.Error(cerr))
 		}
 		break
 	}
 
+	s.mb.RecordModbusDeviceUpDataPoint(now, up, unitID)
 	return s.mb.Emit(), failures.Err()
 }
 
