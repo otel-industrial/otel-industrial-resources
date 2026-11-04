@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Fails when the in-repo modules, manifests, and builder disagree on the OTel
 # collector release. Core beta (v0.x), core stable (v1.x), and contrib modules
 # must each be at a single version everywhere, so MVS cannot lift a receiver to
 # a collector release it was never built against.
-set -uo pipefail
+set -u
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
 col=otel-industrial-collector
@@ -29,10 +29,11 @@ versions() {
 fail=0
 all=$(versions | sort -u)
 for cat in core-beta core-stable contrib; do
-  n=$(awk -v c="$cat" '$1 == c { print $2 }' <<<"$all" | sort -u | wc -l)
+  n=$(printf '%s\n' "$all" | awk -v c="$cat" '$1 == c { print $2 }' | sort -u | wc -l)
+  n=$((n)) # BSD wc pads the count with spaces
   [ "$n" -le 1 ] && continue
   echo "OTel $cat modules are at $n different versions:"
-  awk -v c="$cat" '$1 == c { print "  " $2 "  " $3 }' <<<"$all" | sort -u
+  printf '%s\n' "$all" | awk -v c="$cat" '$1 == c { print "  " $2 "  " $3 }' | sort -u
   fail=1
 done
 exit $fail
