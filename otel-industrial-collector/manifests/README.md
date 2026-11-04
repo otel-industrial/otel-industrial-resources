@@ -90,11 +90,11 @@ OCB cannot merge or include one manifest from another. It takes a single `--conf
 
 ## Versions
 
-All manifests pin collector **0.163.0** (stable modules **1.69.0**). Keep the builder version, `otelcol_version`, and the core component versions in step when you bump.
+All manifests pin collector **0.163.0** (stable modules **1.69.0**). `make update-otel` at the repo root bumps all of them together, and CI fails when they differ. See [docs/release.md](../../docs/release.md).
 
 Two receivers are referenced by commit pseudo-version rather than a release tag, because their modules are untagged or tagged in a way Go cannot resolve for their path:
 
 - OPC UA: the module lives in a subdirectory, so the repo's root `v0.x` tags don't apply to its path.
 - Sparkplug: untagged.
 
-These pins point at a specific commit and will drift over time. Re-resolve them (and the tagged EtherNet/IP and Modbus versions) when refreshing against a newer collector release.
+These pins point at a specific commit and will drift over time. `make update-opcua` and `make update-sparkplug` at the repo root move them to the latest commit, or to `VERSION=<tag, branch, or commit>`.

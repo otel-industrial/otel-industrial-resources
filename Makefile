@@ -91,3 +91,29 @@ endif
 	$(MAKE) multimod-prerelease
 	git add .
 	git commit -m "add multimod changes $(RELEASE_CANDIDATE)" || (echo "no multimod changes to commit")
+
+# Bumps the OTel collector core and contrib modules everywhere to one upstream
+# release. OTEL_CONTRIB_VERSION defaults to OTEL_VERSION.
+#   make update-otel OTEL_VERSION=0.164.0 OTEL_STABLE_VERSION=1.70.0 OTEL_CONTRIB_VERSION=0.164.1
+.PHONY: update-otel
+update-otel:
+	sh .github/scripts/update-otel.sh $(OTEL_VERSION) $(OTEL_STABLE_VERSION) $(OTEL_CONTRIB_VERSION)
+
+# Moves an out-of-OTel receiver's manifest pin to its latest commit, or to
+# VERSION (a tag, branch, or commit).
+#   make update-sparkplug [VERSION=<ref>]
+.PHONY: update-sparkplug
+update-sparkplug:
+	sh .github/scripts/update-module.sh github.com/jmacd/opentelemetry-mqtt-sparkplug $(VERSION)
+
+.PHONY: update-opcua
+update-opcua:
+	sh .github/scripts/update-module.sh github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua $(VERSION)
+
+# Runs update-otel, then moves the OPC UA and Sparkplug receivers to their
+# latest commits.
+#   make update-deps OTEL_VERSION=0.164.0 OTEL_STABLE_VERSION=1.70.0 OTEL_CONTRIB_VERSION=0.164.1
+.PHONY: update-deps
+update-deps: update-otel
+	$(MAKE) update-opcua VERSION=
+	$(MAKE) update-sparkplug VERSION=
