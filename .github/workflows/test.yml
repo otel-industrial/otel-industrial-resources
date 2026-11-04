@@ -21,7 +21,7 @@ jobs:
       - name: Check every module is in the release
         run: sh .github/scripts/check-release-coverage.sh
       - name: Check OTel collector versions are in step
-        run: bash .github/scripts/check-otel-versions.sh
+        run: sh .github/scripts/check-otel-versions.sh
       # Multi-module repo: test/vet/fmt every module. `go test ./...` does not
       # cross module boundaries, and `find -execdir` hides a failing command's
       # exit code, so loop explicitly and fail if any module fails. Module

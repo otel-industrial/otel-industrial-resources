@@ -1,14 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Bumps the OTel collector core and contrib modules to one upstream release:
 # the in-repo go.mod files, the manifests and builder configs, the OCB version,
 # and the docs that name the release. Modules from outside OTel are left alone;
-# bump those by hand.
+# bump those by hand. Needs go and jq.
 #
 #   update-otel.sh <core beta> <core stable> [<contrib>]
 #   update-otel.sh 0.164.0 1.70.0 0.164.1
 #
 # contrib defaults to the core beta version.
-set -euo pipefail
+set -eu
 cd "$(git rev-parse --show-toplevel)"
 
 if [ $# -lt 2 ]; then
@@ -28,9 +28,8 @@ trap 'exit 1' HUP INT TERM
 # Current versions, read from the manifests. check-otel-versions.sh keeps each
 # of them to a single value.
 single() {
-  local v
   v=$(sort -u)
-  if [ "$(wc -l <<<"$v")" -ne 1 ] || [ -z "$v" ]; then
+  if [ -z "$v" ] || [ "$(printf '%s\n' "$v" | wc -l)" -ne 1 ]; then
     echo "manifests disagree on the current $1 version; run check-otel-versions.sh" >&2
     exit 1
   fi
@@ -52,11 +51,13 @@ while read -r dir; do
   echo "updating $dir"
   # shellcheck disable=SC2086
   (cd "$dir" && go get $targets && go mod tidy)
-done < <(find "$col" -name go.mod -not -path "$col/manifests/*" -exec dirname {} \; | sort)
+done <<EOF
+$(find "$col" -name go.mod -not -path "$col/manifests/*" -exec dirname {} \; | sort)
+EOF
 
 # Everything else that names the release. Contrib lines first, since contrib
 # and core can share a version number.
-esc() { sed 's/\./\\./g' <<<"$1"; }
+esc() { printf '%s\n' "$1" | sed 's/\./\\./g'; }
 files=$(git grep -lE "$(esc "$old_beta")|$(esc "$old_stable")|$(esc "$old_contrib")" -- ':!*go.mod' ':!*go.sum' ':!.github/scripts/update-otel.sh')
 # shellcheck disable=SC2086
 sed -i.bak -E \
@@ -66,5 +67,5 @@ sed -i.bak -E \
   $files
 find . -name "*.bak" -type f -delete
 
-bash .github/scripts/check-otel-versions.sh
+sh .github/scripts/check-otel-versions.sh
 finished=1
