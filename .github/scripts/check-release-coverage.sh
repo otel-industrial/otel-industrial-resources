@@ -10,7 +10,7 @@ manifests=(otel-industrial-collector/manifests/*.yaml)
 fail=0
 
 # Only modules that are never published may be excluded from the module set.
-allowed_excluded=("$repo/internal/tools")
+allowed_excluded=("$repo/internal/tools" "$repo/otel-industrial-collector/internal/tools")
 while read -r m; do
   [[ " ${allowed_excluded[*]} " == *" $m "* ]] && continue
   echo "$m is in excluded-modules; add it to the module set in versions.yaml"

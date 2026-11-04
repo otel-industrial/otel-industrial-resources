@@ -7,3 +7,4 @@ module-sets:
       - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver
 excluded-modules:
   - github.com/otel-industrial/otel-industrial-resources/internal/tools
+  - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/internal/tools
