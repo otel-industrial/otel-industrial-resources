@@ -19,7 +19,7 @@ jobs:
       - name: Verify versions.yaml
         run: make multimod-verify
       - name: Check every module is in the release
-        run: bash .github/scripts/check-release-coverage.sh
+        run: sh .github/scripts/check-release-coverage.sh
       # Multi-module repo: test/vet/fmt every module. `go test ./...` does not
       # cross module boundaries, and `find -execdir` hides a failing command's
       # exit code, so loop explicitly and fail if any module fails. Module
