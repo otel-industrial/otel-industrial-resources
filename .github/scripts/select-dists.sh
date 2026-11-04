@@ -7,6 +7,10 @@
 #   select-dists.sh <base-ref>     # changed files from <base-ref>...HEAD
 #   select-dists.sh --all          # every manifest
 set -euo pipefail
+if [ $# -ne 1 ]; then
+  echo "usage: $0 <base-ref>|--all" >&2
+  exit 1
+fi
 cd "$(git rev-parse --show-toplevel)/otel-industrial-collector/manifests"
 
 repo=github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector

@@ -17,5 +17,6 @@ new=$(GOFLAGS=-mod=mod go list -m -f '{{.Version}}' "$mod@$query")
 files=$(grep -l "^  - gomod: $mod " ./*.yaml)
 old=$(sed -n "s#^  - gomod: $mod \([^ ]*\).*#\1#p" $files | sort -u | paste -sd, -)
 # shellcheck disable=SC2086
-sed -i "s#^\(  - gomod: $mod \)[^ ]*#\1$new#" $files
+sed -i.bak "s#^\(  - gomod: $mod \)[^ ]*#\1$new#" $files
+find . -name "*.bak" -type f -delete
 echo "$mod: $old -> $new"

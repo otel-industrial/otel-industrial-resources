@@ -19,6 +19,12 @@ beta=$1 stable=$2 contrib=${3:-$1}
 col=otel-industrial-collector
 contrib_path=github.com/open-telemetry/opentelemetry-collector-contrib
 
+# A failed or interrupted run puts every file back, so start from a clean tree.
+test -z "$(git status --porcelain)" || { echo "local repository not clean" >&2; exit 1; }
+finished=
+trap 'test -n "$finished" || { git checkout -q -- .; find . -name "*.bak" -type f -delete; }' EXIT
+trap 'exit 1' HUP INT TERM
+
 # Current versions, read from the manifests. check-otel-versions.sh keeps each
 # of them to a single value.
 single() {
@@ -53,10 +59,12 @@ done < <(find "$col" -name go.mod -not -path "$col/manifests/*" -exec dirname {}
 esc() { sed 's/\./\\./g' <<<"$1"; }
 files=$(git grep -lE "$(esc "$old_beta")|$(esc "$old_stable")|$(esc "$old_contrib")" -- ':!*go.mod' ':!*go.sum' ':!.github/scripts/update-otel.sh')
 # shellcheck disable=SC2086
-sed -i -E \
+sed -i.bak -E \
   -e "/opentelemetry-collector-contrib/ s/(^|[^0-9.])$(esc "$old_contrib")([^0-9]|$)/\1$contrib\2/g" \
   -e "/opentelemetry-collector-contrib/! s/(^|[^0-9.])$(esc "$old_beta")([^0-9]|$)/\1$beta\2/g" \
   -e "/opentelemetry-collector-contrib/! s/(^|[^0-9.])$(esc "$old_stable")([^0-9]|$)/\1$stable\2/g" \
   $files
+find . -name "*.bak" -type f -delete
 
 bash .github/scripts/check-otel-versions.sh
+finished=1

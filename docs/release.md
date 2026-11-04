@@ -41,8 +41,9 @@ worktree.
 
    This updates the in-repo `go.mod` files, the manifests and builder
    configs, the OCB version, and the docs, then runs
-   `.github/scripts/check-otel-versions.sh`. Move the receivers from outside
-   OTel to their latest commit with `make update-opcua` and
+   `.github/scripts/check-otel-versions.sh`. It needs `jq` and a clean tree,
+   and a failed or interrupted run puts every file back. Move the receivers
+   from outside OTel to their latest commit with `make update-opcua` and
    `make update-sparkplug`, or pin one with `VERSION=<tag, branch, or commit>`.
    `make update-deps` runs all three, taking the same `OTEL_*` variables as
    `update-otel`. It always moves OPC UA and Sparkplug to their latest commits,
