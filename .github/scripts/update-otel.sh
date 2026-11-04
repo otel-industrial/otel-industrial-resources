@@ -2,7 +2,12 @@
 # Bumps the OTel collector core and contrib modules to one upstream release:
 # the in-repo go.mod files, the manifests and builder configs, the OCB version,
 # and the docs that name the release. Modules from outside OTel are left alone;
-# bump those by hand. Needs go and jq.
+# bump those by hand.
+#
+# The go.mod files are moved with `multimod sync`, one core module set at a
+# time with a commit after each, as contrib's update-otel does. Contrib syncs
+# against a sibling checkout of opentelemetry-collector; this runs locally, so
+# it clones that repo at the release tag into a temporary directory instead.
 #
 #   update-otel.sh <core beta> <core stable> [<contrib>]
 #   update-otel.sh 0.164.0 1.70.0 0.164.1
@@ -19,10 +24,13 @@ beta=$1 stable=$2 contrib=${3:-$1}
 col=otel-industrial-collector
 contrib_path=github.com/open-telemetry/opentelemetry-collector-contrib
 
-# A failed or interrupted run puts every file back, so start from a clean tree.
+# A failed or interrupted run resets the branch to where it started, so start
+# from a clean tree.
 test -z "$(git status --porcelain)" || { echo "local repository not clean" >&2; exit 1; }
+start=$(git rev-parse HEAD)
+core=$(mktemp -d)
 finished=
-trap 'test -n "$finished" || { git checkout -q -- .; find . -name "*.bak" -type f -delete; }' EXIT
+trap 'rm -rf "$core"; test -n "$finished" || { git reset -q --hard "$start"; find . -name "*.bak" -type f -delete; }' EXIT
 trap 'exit 1' HUP INT TERM
 
 # Current versions, read from the manifests. check-otel-versions.sh keeps each
@@ -39,21 +47,17 @@ old_beta=$(sed -n 's/^  otelcol_version: //p' "$col"/manifests/*.yaml | single "
 old_stable=$(grep -ohE 'go\.opentelemetry\.io/collector/[^ ]* v1\.[0-9.]+' "$col"/manifests/*.yaml | sed 's/.* v//' | single "core stable")
 old_contrib=$(grep -ohE "$contrib_path/[^ ]* v[0-9.]+" "$col"/manifests/*.yaml | sed 's/.* v//' | single contrib)
 
-# go.mod files: move every OTel collector requirement to the new release.
-while read -r dir; do
-  targets=$(go mod edit -json "$dir/go.mod" | jq -r --arg beta "$beta" --arg stable "$stable" --arg contrib "$contrib" --arg cp "$contrib_path/" '
-    .Require[]? | .Path as $p |
-    if ($p | startswith($cp)) then "\($p)@v\($contrib)"
-    elif ($p | startswith("go.opentelemetry.io/collector")) then
-      (if (.Version | startswith("v0.")) then "\($p)@v\($beta)" else "\($p)@v\($stable)" end)
-    else empty end')
-  [ -z "$targets" ] && continue
-  echo "updating $dir"
-  # shellcheck disable=SC2086
-  (cd "$dir" && go get $targets && go mod tidy)
-done <<EOF
-$(find "$col" -name go.mod -not -path "$col/manifests/*" -exec dirname {} \; | sort)
-EOF
+# go.mod files: sync each core module set, committing between them, since
+# multimod sync needs a clean tree. multimod treats every go.mod on disk as a
+# module, so remove any OCB build output first.
+make -s clean-dists
+git clone -q --depth 1 --branch "v$beta" https://github.com/open-telemetry/opentelemetry-collector "$core"
+multimod="go -C internal/tools tool multimod"
+$multimod sync -s=true -o "$core" -m stable --commit-hash "v$stable"
+git diff --quiet || git commit -qam "multimod update stable modules to v$stable"
+$multimod sync -s=true -o "$core" -m beta --commit-hash "v$beta"
+git diff --quiet || git commit -qam "multimod update beta modules to v$beta"
+make -s gotidy
 
 # Everything else that names the release. Contrib lines first, since contrib
 # and core can share a version number.
@@ -68,4 +72,5 @@ sed -i.bak -E \
 find . -name "*.bak" -type f -delete
 
 sh .github/scripts/check-otel-versions.sh
+git commit -qam "Update the OTel collector to v$beta in the manifests and docs"
 finished=1
