@@ -43,6 +43,9 @@ worktree.
    make prepare-release PREVIOUS_VERSION=0.1.0 RELEASE_CANDIDATE=0.2.0
    ```
 
+   `versions.yaml` starts at `0.0.1`, so the first release is
+   `PREVIOUS_VERSION=0.0.1 RELEASE_CANDIDATE=0.1.0`.
+
    This updates `versions.yaml`, the `dist.version` and receiver versions in
    the manifests, and every intra-repo `require` in the `go.mod` files, and
    commits the result.
@@ -55,11 +58,20 @@ From an up-to-date `main` at the merged release commit:
 ```sh
 make push-tags COMMIT=<release commit>
 git tag -a v0.2.0 <release commit> -m v0.2.0
-git push origin v0.2.0
+git push <remote> v0.2.0
 ```
 
+`REMOTE` defaults to the SSH URL of this repo; over HTTPS, pass
+`REMOTE=https://github.com/otel-industrial/otel-industrial-resources.git`, or
+`REMOTE=origin` if `origin` is this repo rather than a fork. Push the repo tag
+to the same remote.
+
 `push-tags` tags every module in the set (for example
-`otel-industrial-collector/receiver/modbusreceiver/v0.2.0`). Push them before
-the repo tag. The repo tag starts the `release` workflow, which builds the
+`otel-industrial-collector/receiver/modbusreceiver/v0.2.0`) and pushes them in
+one atomic push. If `COMMIT` is not checked out, it offers to check it out and
+returns you to your branch afterwards; without a terminal it stops instead. It
+stops before tagging if any of the tags already exist on the remote. If the
+push fails or is interrupted, it deletes the tags it created, so you can fix
+the problem and run it again. Push the module tags before the repo tag. The repo tag starts the `release` workflow, which builds the
 distributions from the module tags, as anyone using the manifests would, and
 creates a draft GitHub release. Review the draft and publish it.
