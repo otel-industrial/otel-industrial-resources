@@ -13,6 +13,7 @@
 dist:
   name: otelcol-industrial-gateway
   description: Full multi-protocol OpenTelemetry Collector for industrial gateways
+  version: 0.0.1
   output_path: ./otelcol-industrial-gateway
   otelcol_version: 0.163.0
 

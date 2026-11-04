@@ -23,9 +23,10 @@ make                       # build all distributions
 make modbus-edge-gateway   # build one
 make clean                 # remove build output
 make LDFLAGS=              # keep symbols (unstripped, debuggable)
+make LOCAL=1               # build the in-repo receivers from this checkout
 ```
 
-The builder strips symbols (`-s -w`) by default; `make LDFLAGS=` keeps them for a debuggable build.
+The builder strips symbols (`-s -w`) by default; `make LDFLAGS=` keeps them for a debuggable build. The manifests pin the in-repo receivers by release tag, so `make LOCAL=1` is how to build them against local changes.
 
 ## Manifests
 

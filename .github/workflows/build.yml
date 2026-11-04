@@ -85,4 +85,4 @@ jobs:
           restore-keys: gocache-${{ runner.os }}-${{ runner.arch }}-
       - name: Build ${{ matrix.dist }}
         working-directory: otel-industrial-collector/manifests
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" make ${{ matrix.dist }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/retry.sh" make LOCAL=1 ${{ matrix.dist }}
