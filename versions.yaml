@@ -1,0 +1,10 @@
+module-sets:
+  industrial:
+    version: v0.0.1
+    modules:
+      - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/industrialscraper
+      - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver
+      - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver
+excluded-modules:
+  - github.com/otel-industrial/otel-industrial-resources/internal/tools
+  - github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/internal/tools

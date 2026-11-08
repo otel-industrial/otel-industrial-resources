@@ -7,6 +7,7 @@
 dist:
   name: otelcol-ethernetip
   description: Minimal OpenTelemetry Collector for Rockwell/Allen-Bradley EtherNet/IP cells
+  version: 0.0.1
   output_path: ./otelcol-ethernetip
   otelcol_version: 0.163.0
 

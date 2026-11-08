@@ -8,6 +8,7 @@
 dist:
   name: otelcol-modbus-edge
   description: Minimal OpenTelemetry Collector for Modbus edge gateways
+  version: 0.0.1
   output_path: ./otelcol-modbus-edge
   otelcol_version: 0.163.0
 

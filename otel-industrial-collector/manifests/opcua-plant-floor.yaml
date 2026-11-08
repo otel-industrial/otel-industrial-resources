@@ -10,6 +10,7 @@
 dist:
   name: otelcol-opcua
   description: Minimal OpenTelemetry Collector for OPC UA plant-floor servers
+  version: 0.0.1
   output_path: ./otelcol-opcua
   otelcol_version: 0.163.0
 
