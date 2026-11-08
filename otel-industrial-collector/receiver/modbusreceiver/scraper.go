@@ -44,9 +44,13 @@ type modbusConn struct {
 	dial   dialFunc
 	client modbus.Client
 	closer io.Closer
+	// dials counts connection attempts, so the scraper can tell whether a
+	// failed EnsureLive contacted the network.
+	dials int
 }
 
 func (c *modbusConn) Connect(context.Context) error {
+	c.dials++
 	client, closer, err := c.dial(c.cfg)
 	if err != nil {
 		return err
@@ -119,8 +123,11 @@ func (s *modbusScraper) shutdown(ctx context.Context) error {
 // Every scrape that reaches the device also records modbus.device.up: 0 when
 // the device cannot be reached (connect failure, reconnect backoff, or a
 // transport error mid-scan), otherwise 1. Modbus exceptions, decode errors,
-// the scrape deadline and a busy device leave it at 1, since the device
-// answered.
+// the scrape deadline mid-scan and a busy device leave it at 1, since the
+// device answered. If the deadline passes before the device is dialed, for
+// example while waiting for another poll to the same endpoint, no
+// modbus.device.up point is recorded, since nothing was learned about the
+// device.
 func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	if err := s.lim.Acquire(ctx); err != nil {
 		return pmetric.NewMetrics(), err
@@ -134,7 +141,16 @@ func (s *modbusScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	unitID := int64(s.cfg.UnitID)
 
 	var failures industrialscraper.Failures
+	dials := s.conn.dials
 	if err := s.sess.EnsureLive(ctx); err != nil {
+		// The scrape deadline passed before the device was dialed: report
+		// nothing about it, as when the scrape times out waiting for the
+		// endpoint limiter. Go by ctx and the dial count, not by err: a net
+		// dial timeout also matches context.DeadlineExceeded, and that one
+		// means the device did not answer.
+		if ctx.Err() != nil && s.conn.dials == dials {
+			return pmetric.NewMetrics(), fmt.Errorf("scrape deadline reached before polling the device: %w", err)
+		}
 		// A partial (not plain) error makes the controller still emit
 		// device.up, with every register counted as failed.
 		if s.busy && errors.Is(err, industrialscraper.ErrBackingOff) {

@@ -3,6 +3,7 @@ package modbusreceiver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
@@ -581,6 +582,67 @@ func TestScrapeCancelledBeforeStart(t *testing.T) {
 	_, err := s.scrape(ctx)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, 0, *dials)
+}
+
+// A scrape whose deadline passes before the device is dialed, for example
+// while it waits for another poll to the same endpoint, says nothing about the
+// device: no modbus.device.up point and no dial.
+func TestScrapeDeadlineBeforeDialSkipsDeviceUp(t *testing.T) {
+	cfg := testConfig(holding(0, DataTypeUint16))
+	cfg.Endpoint = "deadline-test.invalid:502"
+	dev := &fakeDevice{read: okRead}
+	s, dials := newTestScraper(cfg, dev)
+
+	// Hold the scraper's lock so the scrape stops after taking the endpoint
+	// limiter and before it dials, then cancel its context.
+	s.mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type result struct {
+		md  pmetric.Metrics
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		md, err := s.scrape(ctx)
+		done <- result{md, err}
+	}()
+
+	lim := industrialscraper.DeviceLimiter(cfg.Endpoint)
+	require.Eventually(t, func() bool {
+		probe, stop := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		defer stop()
+		if lim.Acquire(probe) == nil {
+			lim.Release()
+			return false
+		}
+		return true // the scrape holds the limiter
+	}, 5*time.Second, 10*time.Millisecond)
+	cancel()
+	s.mu.Unlock()
+
+	r := <-done
+	require.ErrorIs(t, r.err, context.Canceled)
+	assert.Equal(t, 0, r.md.DataPointCount(), "no modbus.device.up when the device was not contacted")
+	assert.Equal(t, 0, *dials)
+}
+
+// A dial that fails after the deadline has passed did reach out to the
+// device, so it still reports device.up = 0. A net dial timeout matches
+// context.DeadlineExceeded, which is why the scraper does not go by err alone.
+func TestScrapeDialTimeoutReportsDown(t *testing.T) {
+	cfg := testConfig(holding(0, DataTypeUint16))
+	s := newModbusScraper(cfg, testSettings(), dialTCP)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.conn.dial = func(*Config) (modbus.Client, io.Closer, error) {
+		cancel() // the scrape deadline passes while dialing
+		return nil, nil, fmt.Errorf("dial tcp: i/o timeout: %w", context.DeadlineExceeded)
+	}
+
+	md, err := s.scrape(ctx)
+	requirePartial(t, err, 1)
+	assert.Equal(t, int64(0), deviceUp(t, md), "the device did not answer the dial")
 }
 
 // End to end through the scraperhelper controller: a transport error must

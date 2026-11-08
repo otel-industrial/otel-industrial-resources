@@ -197,7 +197,8 @@ configured).
 Each value metric is emitted once per scrape, with one data point per
 register. `modbus.device.up` has one data point per scrape, with the
 `modbus.unit_id` attribute, so a device that stops answering shows up as `0`
-that you can alert on. Any metric can be turned off with the standard mdatagen `metrics` setting:
+that you can alert on. Any metric can be turned off with the standard mdatagen
+`metrics` setting:
 
 ```yaml
 receivers:
@@ -225,7 +226,9 @@ such as timestamps or IDs in `name`.
   contacting the device.
 - **Several receivers on one device:** Polls to the same `endpoint` are
   serialized across the collector, so receivers sharing a device or gateway
-  take turns instead of polling it at once.
+  take turns instead of polling it at once. If a poll's `timeout` runs out
+  before it reaches the device, nothing is reported for that poll, not even
+  `modbus.device.up`, since the device was not contacted.
 - **Connection lost during a poll:** The connection is closed, the remaining
   registers are skipped for that poll, values already read are still
   emitted, and `modbus.device.up` is `0`. The receiver reconnects on the next
