@@ -26,11 +26,18 @@ when the device is down, so a dead device shows up as `0` instead of
 disappearing from your dashboards.
 
 `device.up` answers one question: *did the device respond?* It is `0` when the
-connection fails, while the receiver waits out its reconnect backoff, or when
-the connection drops in the middle of a poll. It stays `1` when the device
-answers but rejects some requests, for example a Modbus exception for one
-register or an EtherNet/IP tag that cannot be read, and when a Modbus device
-reports that it is busy (exception 06).
+connection fails or while the receiver waits out its reconnect backoff. It
+stays `1` when the device answers but rejects some requests, for example a
+Modbus exception for one register or an EtherNet/IP tag that cannot be read,
+and when a Modbus device reports that it is busy (exception 06).
+
+The two receivers differ when the connection drops in the middle of a poll:
+
+- **Modbus** reports `0` for that poll.
+- **EtherNet/IP** checks the device with a ListIdentity request at the start of
+  each poll and reports `1` once it answers. If the connection drops after
+  that, the poll still reports `1`, every remaining tag fails, and the drop
+  shows up as `0` on the next poll.
 
 ## device.up and scrape errors
 
@@ -42,7 +49,9 @@ complement each other:
 |---|---|---|
 | Device healthy | `1` | `0` |
 | Device answers, some registers or tags fail | `1` | number of failed items |
-| Device unreachable | `0` | all configured items |
+| Modbus device busy (exception 06) | `1` | all configured items |
+| EtherNet/IP connection drops after the ListIdentity check | `1` | failed tags (`0` on the next poll) |
+| Device unreachable, or Modbus connection drops during a poll | `0` | all configured items, or the ones not yet read |
 
 Use `device.up` to alert on devices that are gone, and the errored points to
 find configuration problems such as a wrong register address or an unsupported
@@ -79,8 +88,12 @@ changes(ethernetip_device_up[15m]) > 4
 export path. Add a separate alert for missing data, for example:
 
 ```promql
-absent_over_time(modbus_device_up[5m])
+absent_over_time(modbus_device_up{job="plant-a-collector"}[5m])
 ```
+
+`absent_over_time` only fires when no matching series is left. Without a
+label filter, it does not notice one collector stopping while others still
+report. Scope it to each collector, for example by `job` or `instance`.
 
 ## Telling devices apart
 
@@ -96,9 +109,14 @@ for example with the device name and its location in the plant.
 ## Operational notes
 
 - **Reconnect backoff:** after a connection failure, the receivers wait out
-  their `reconnect_on_failure` backoff (10s, growing to 60s by default) before
-  they reconnect. A device that comes back can take up to a minute to report
-  `1` again.
+  their `reconnect_on_failure` backoff before they reconnect. By default it
+  starts at 10s and grows to 60s, with up to 50% random jitter. A device that
+  comes back can take up to about 90 seconds, plus one collection interval,
+  to report `1` again. Size your alert windows with this in mind.
+- **Scrape timeouts:** if a Modbus poll runs out of time before it reaches the
+  device, for example while waiting for another receiver polling the same
+  endpoint, no `device.up` point is reported for that poll, rather than a
+  false `0`.
 - **Planned downtime:** silence these alerts during maintenance windows, so a
   planned PLC restart does not page anyone.
 - **Change correlation:** for security monitoring, correlate unexpected device
