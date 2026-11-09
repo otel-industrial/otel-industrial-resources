@@ -16,6 +16,16 @@ gotidy:
 		(cd "$${dir}" && go mod tidy); \
 	done
 
+# Every component with a metadata.yaml, the same set CI regenerates.
+GENERATE_DIRS := $(shell find . -name metadata.yaml -not -path '*/vendor/*' -not -path '*/testdata/*' -exec dirname {} \; | sort)
+
+.PHONY: generate
+generate:
+	@set -e; for dir in $(GENERATE_DIRS); do \
+		echo "make generate in $${dir}"; \
+		$(MAKE) -C "$${dir}" generate; \
+	done
+
 # multimod treats every go.mod on disk as a module, including OCB build output.
 .PHONY: clean-dists
 clean-dists:

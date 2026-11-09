@@ -1,13 +1,16 @@
 #!/bin/sh
 # Bumps the OTel collector core and contrib modules to one upstream release:
 # the in-repo go.mod files, the manifests and builder configs, the OCB version,
-# and the docs that name the release. Modules from outside OTel are left alone;
-# bump those by hand.
+# the docs that name the release, and the mdatagen code. Modules from outside
+# OTel are left alone; bump those by hand.
 #
 # The go.mod files are moved with `multimod sync`, one core module set at a
 # time with a commit after each, as contrib's update-otel does. Contrib syncs
 # against a sibling checkout of opentelemetry-collector; this runs locally, so
 # it clones that repo at the release tag into a temporary directory instead.
+#
+# Run it from a regular clone: multimod cannot read the git state of a linked
+# worktree.
 #
 #   update-otel.sh <core beta> <core stable> [<contrib>]
 #   update-otel.sh 0.164.0 1.70.0 0.164.1
@@ -71,6 +74,12 @@ sed -i.bak -E \
   $files
 find . -name "*.bak" -type f -delete
 
+# Regenerate the mdatagen code with the new mdatagen and tidy again, as
+# contrib's update-otel does.
+make -s generate
+make -s gotidy
+
 sh .github/scripts/check-otel-versions.sh
-git commit -qam "Update the OTel collector to v$beta in the manifests and docs"
+git add -A
+git commit -qm "Update the OTel collector to v$beta in the manifests, docs and generated code"
 finished=1

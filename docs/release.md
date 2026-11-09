@@ -41,8 +41,8 @@ worktree.
 
    This clones `opentelemetry-collector` at the release tag into a temporary
    directory, syncs the in-repo `go.mod` files with `multimod sync` (as
-   contrib does), and bumps the manifests, builder configs, OCB version, and
-   docs. It commits each step and runs
+   contrib does), bumps the manifests, builder configs, OCB version, and
+   docs, and regenerates the mdatagen code. It commits each step and runs
    `.github/scripts/check-otel-versions.sh`. It needs a clean tree and network
    access, and a failed or interrupted run resets the branch to where it
    started. Move the receivers
