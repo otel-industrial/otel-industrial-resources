@@ -59,6 +59,7 @@ func TestMetricsBuilder(t *testing.T) {
 			mb := NewMetricsBuilder(loadMetricsBuilderConfig(t, tt.name), settings, WithStartTime(start))
 			aggMap := make(map[string]string) // contains the aggregation strategies for each metric name
 			aggMap["modbus.coil.value"] = mb.metricModbusCoilValue.config.AggregationStrategy
+			aggMap["modbus.device.up"] = mb.metricModbusDeviceUp.config.AggregationStrategy
 			aggMap["modbus.register.value"] = mb.metricModbusRegisterValue.config.AggregationStrategy
 
 			expectedWarnings := 0
@@ -79,6 +80,15 @@ func TestMetricsBuilder(t *testing.T) {
 			}
 			defaultMetricsCount++
 			allMetricsCount++
+			mb.RecordModbusDeviceUpDataPoint(ts, 1, 14)
+			if tt.name == "reaggregate_set" {
+				mb.RecordModbusDeviceUpDataPoint(ts, 3, 15)
+				// a different timestamp is a different key: must not merge with the above.
+				mb.RecordModbusDeviceUpDataPoint(ts+1, 3, 15)
+				assert.Equal(t, 2, mb.metricModbusDeviceUp.data.Gauge().DataPoints().Len())
+			}
+			defaultMetricsCount++
+			allMetricsCount++
 			mb.RecordModbusRegisterValueDataPoint(ts, 1, AttributeModbusByteOrderABCD, AttributeModbusDataTypeBool, "modbus.name-val", 23, AttributeModbusRegisterTypeCoil, 14)
 			if tt.name == "reaggregate_set" {
 				mb.RecordModbusRegisterValueDataPoint(ts, 3, AttributeModbusByteOrderDCBA, AttributeModbusDataTypeInt16, "modbus.name-val-2", 24, AttributeModbusRegisterTypeDiscreteInput, 15)
@@ -91,6 +101,7 @@ func TestMetricsBuilder(t *testing.T) {
 			metrics := mb.Emit(WithResource(res))
 			if tt.name == "reaggregate_set" {
 				assert.Empty(t, mb.metricModbusCoilValue.aggDataPoints)
+				assert.Empty(t, mb.metricModbusDeviceUp.aggDataPoints)
 				assert.Empty(t, mb.metricModbusRegisterValue.aggDataPoints)
 			}
 
@@ -174,6 +185,48 @@ func TestMetricsBuilder(t *testing.T) {
 						_, ok = dp.Attributes().Get("modbus.register_type")
 						assert.False(t, ok)
 						_, ok = dp.Attributes().Get("modbus.unit_id")
+						assert.False(t, ok)
+					}
+				case "modbus.device.up":
+					if tt.name != "reaggregate_set" {
+						assert.False(t, validatedMetrics["modbus.device.up"], "Found a duplicate in the metrics slice: modbus.device.up")
+						validatedMetrics["modbus.device.up"] = true
+						assert.Equal(t, pmetric.MetricTypeGauge, mi.Type())
+						assert.Equal(t, 1, mi.Gauge().DataPoints().Len())
+						assert.Equal(t, "Whether the device responded to the last poll (1) or not (0).", mi.Description())
+						assert.Equal(t, "1", mi.Unit())
+						dp := mi.Gauge().DataPoints().At(0)
+						assert.Equal(t, start, dp.StartTimestamp())
+						assert.Equal(t, ts, dp.Timestamp())
+						assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
+						assert.Equal(t, int64(1), dp.IntValue())
+						modbusUnitIDAttrVal, ok := dp.Attributes().Get("modbus.unit_id")
+						assert.True(t, ok)
+						assert.EqualValues(t, 14, modbusUnitIDAttrVal.Int())
+					} else {
+						assert.False(t, validatedMetrics["modbus.device.up"], "Found a duplicate in the metrics slice: modbus.device.up")
+						validatedMetrics["modbus.device.up"] = true
+						assert.Equal(t, pmetric.MetricTypeGauge, mi.Type())
+						// 2 points: the merged one above, plus one with a different timestamp that must not have merged with it.
+						assert.Equal(t, 2, mi.Gauge().DataPoints().Len())
+						assert.Equal(t, ts+1, mi.Gauge().DataPoints().At(1).Timestamp())
+						assert.Equal(t, "Whether the device responded to the last poll (1) or not (0).", mi.Description())
+						assert.Equal(t, "1", mi.Unit())
+						dp := mi.Gauge().DataPoints().At(0)
+						assert.Equal(t, start, dp.StartTimestamp())
+						assert.Equal(t, ts, dp.Timestamp())
+						assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
+						switch aggMap["modbus.device.up"] {
+						case "sum":
+							assert.Equal(t, int64(4), dp.IntValue())
+						case "avg":
+							assert.Equal(t, int64(2), dp.IntValue())
+						case "min":
+							assert.Equal(t, int64(1), dp.IntValue())
+						case "max":
+							assert.Equal(t, int64(3), dp.IntValue())
+						}
+						_, ok := dp.Attributes().Get("modbus.unit_id")
 						assert.False(t, ok)
 					}
 				case "modbus.register.value":

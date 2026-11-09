@@ -4,12 +4,18 @@ all_set:
     modbus.coil.value:
       enabled: true
       attributes: ["modbus.name","modbus.register_address","modbus.register_type","modbus.unit_id"]
+    modbus.device.up:
+      enabled: true
+      attributes: ["modbus.unit_id"]
     modbus.register.value:
       enabled: true
       attributes: ["modbus.byte_order","modbus.data_type","modbus.name","modbus.register_address","modbus.register_type","modbus.unit_id"]
 reaggregate_set:
   metrics:
     modbus.coil.value:
+      enabled: true
+      attributes: []
+    modbus.device.up:
       enabled: true
       attributes: []
     modbus.register.value:
@@ -20,6 +26,9 @@ none_set:
     modbus.coil.value:
       enabled: false
       attributes: ["modbus.name","modbus.register_address","modbus.register_type","modbus.unit_id"]
+    modbus.device.up:
+      enabled: false
+      attributes: ["modbus.unit_id"]
     modbus.register.value:
       enabled: false
       attributes: ["modbus.byte_order","modbus.data_type","modbus.name","modbus.register_address","modbus.register_type","modbus.unit_id"]

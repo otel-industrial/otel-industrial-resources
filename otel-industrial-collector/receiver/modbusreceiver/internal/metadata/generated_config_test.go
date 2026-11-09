@@ -31,6 +31,11 @@ func TestMetricsBuilderConfig(t *testing.T) {
 						AggregationStrategy: AggregationStrategyAvg,
 						EnabledAttributes:   []ModbusCoilValueMetricAttributeKey{ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID},
 					},
+					ModbusDeviceUp: ModbusDeviceUpMetricConfig{
+						Enabled:             true,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []ModbusDeviceUpMetricAttributeKey{ModbusDeviceUpMetricAttributeKeyModbusUnitID},
+					},
 					ModbusRegisterValue: ModbusRegisterValueMetricConfig{
 						Enabled:             true,
 						AggregationStrategy: AggregationStrategyAvg,
@@ -48,6 +53,11 @@ func TestMetricsBuilderConfig(t *testing.T) {
 						AggregationStrategy: AggregationStrategyAvg,
 						EnabledAttributes:   []ModbusCoilValueMetricAttributeKey{ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID},
 					},
+					ModbusDeviceUp: ModbusDeviceUpMetricConfig{
+						Enabled:             false,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []ModbusDeviceUpMetricAttributeKey{ModbusDeviceUpMetricAttributeKeyModbusUnitID},
+					},
 					ModbusRegisterValue: ModbusRegisterValueMetricConfig{
 						Enabled:             false,
 						AggregationStrategy: AggregationStrategyAvg,
@@ -60,7 +70,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ModbusCoilValueMetricConfig{}, ModbusRegisterValueMetricConfig{}))
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ModbusCoilValueMetricConfig{}, ModbusDeviceUpMetricConfig{}, ModbusRegisterValueMetricConfig{}))
 			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
@@ -73,6 +83,18 @@ func TestModbusCoilValueMetricsConfig_Validate(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "metric modbus.coil.value doesn't have an attribute invalid, valid attributes: [modbus.name, modbus.register_address, modbus.register_type, modbus.unit_id]")
 
 	cfg = DefaultMetricsConfig().ModbusCoilValue
+	cfg.AggregationStrategy = "invalid"
+	require.ErrorContains(t, cfg.Validate(), "invalid aggregation strategy")
+}
+
+func TestModbusDeviceUpMetricsConfig_Validate(t *testing.T) {
+	cfg := DefaultMetricsConfig().ModbusDeviceUp
+	require.NoError(t, cfg.Validate())
+
+	cfg.EnabledAttributes = []ModbusDeviceUpMetricAttributeKey{"invalid"}
+	require.ErrorContains(t, cfg.Validate(), "metric modbus.device.up doesn't have an attribute invalid, valid attributes: [modbus.unit_id]")
+
+	cfg = DefaultMetricsConfig().ModbusDeviceUp
 	cfg.AggregationStrategy = "invalid"
 	require.ErrorContains(t, cfg.Validate(), "invalid aggregation strategy")
 }
