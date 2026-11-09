@@ -32,10 +32,26 @@ checkout.
 Run these in a regular clone. multimod cannot read the git state of a linked
 worktree.
 
-1. Bump any external modules in the manifests by hand: the collector core and
-   contrib components (`v0.163.0`, `v1.69.0`, `otelcol_version`, and the OCB
-   version in the workflows and Makefiles), and the out-of-repo receivers
-   (OPC UA, Sparkplug). `prepare-release` only changes this repo's version.
+1. Bump the OTel collector core and contrib modules to the upstream release
+   you are building against:
+
+   ```sh
+   make update-otel OTEL_VERSION=0.164.0 OTEL_STABLE_VERSION=1.70.0 OTEL_CONTRIB_VERSION=0.164.1
+   ```
+
+   This clones `opentelemetry-collector` at the release tag into a temporary
+   directory, syncs the in-repo `go.mod` files with `multimod sync` (as
+   contrib does), bumps the manifests, builder configs, OCB version, and
+   docs, and regenerates the mdatagen code. It commits each step and runs
+   `.github/scripts/check-otel-versions.sh`. It needs a clean tree and network
+   access, and a failed or interrupted run resets the branch to where it
+   started. Move the receivers
+   from outside OTel to their latest commit with `make update-opcua` and
+   `make update-sparkplug`, or pin one with `VERSION=<tag, branch, or commit>`.
+   `make update-deps` runs all three, taking the same `OTEL_*` variables as
+   `update-otel`. It always moves OPC UA and Sparkplug to their latest commits,
+   so use the single targets to pin either one.
+   `prepare-release` only changes this repo's version.
 2. Create a branch and run, with the current version from `versions.yaml` as
    `PREVIOUS_VERSION`:
 
