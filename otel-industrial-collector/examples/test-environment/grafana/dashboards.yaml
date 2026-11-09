@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: otel-industrial
+    folder: OpenTelemetry Industrial
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

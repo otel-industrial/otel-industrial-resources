@@ -1,0 +1,16 @@
+# Prometheus for the test environment. It scrapes nothing: the collector pushes
+# metrics to its OTLP endpoint (/api/v1/otlp), enabled with
+# --web.enable-otlp-receiver in compose.yaml and run-podman.sh.
+
+otlp:
+  # Copy these resource attributes onto every series, so dashboards can filter
+  # and group by them (otherwise they only appear on target_info).
+  promote_resource_attributes:
+    - ethernetip.device.address
+    - ethernetip.device.name
+    - site.name
+
+storage:
+  tsdb:
+    # OTLP pushes can arrive slightly out of order; accept them.
+    out_of_order_time_window: 30m
