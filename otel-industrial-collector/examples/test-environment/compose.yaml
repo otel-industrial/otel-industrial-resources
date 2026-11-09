@@ -1,0 +1,62 @@
+# OpenTelemetry Industrial test environment: simulated devices, the
+# otelcol-industrial-gateway distribution, Prometheus and Grafana.
+#
+#   cd otel-industrial-collector/examples/test-environment
+#   docker compose up --build        # or: podman compose up --build
+#
+# Grafana:    http://localhost:3000  (dashboard "OpenTelemetry Industrial Demo")
+# Prometheus: http://localhost:9090
+#
+# No compose tool? See run-podman.sh.
+
+name: otel-industrial-demo
+
+services:
+  modbus-sim:
+    image: otel-industrial-demo:local
+    build:
+      context: ../../..          # repo root
+      dockerfile: otel-industrial-collector/examples/test-environment/Dockerfile
+    command: ["modbus-simulator", "-addr", "0.0.0.0:5020"]
+
+  enip-sim:
+    image: otel-industrial-demo:local
+    pull_policy: never
+    depends_on: [modbus-sim]     # built by modbus-sim
+    command: ["enip-simulator"]
+
+  gateway:
+    image: otel-industrial-demo:local
+    pull_policy: never
+    depends_on: [modbus-sim, enip-sim, prometheus]
+    command: ["otelcol-industrial-gateway", "--config", "/etc/otelcol/collector.yaml"]
+    volumes:
+      - ./collector.yaml:/etc/otelcol/collector.yaml:ro
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-otlp-receiver
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    depends_on: [prometheus]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/industrial-demo.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+    volumes:
+      - ./grafana/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml:ro
+      - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
