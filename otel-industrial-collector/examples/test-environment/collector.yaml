@@ -1,0 +1,92 @@
+# otelcol-industrial-gateway configuration for the test environment.
+# Polls the simulated devices and pushes metrics to Prometheus over OTLP.
+
+receivers:
+  modbus:
+    endpoint: modbus-sim:5020
+    unit_id: 1
+    collection_interval: 5s
+    request_timeout: 2s
+    reconnect_on_failure:
+      initial_interval: 2s
+      max_interval: 10s
+    registers:
+      - address: 0
+        type: holding_register
+        data_type: float32
+        byte_order: ABCD
+        name: temperature
+      - address: 2
+        type: holding_register
+        data_type: uint16
+        byte_order: ABCD
+        name: pressure
+      - address: 3
+        type: holding_register
+        data_type: uint16
+        byte_order: ABCD
+        name: humidity
+      - address: 4
+        type: holding_register
+        data_type: float32
+        byte_order: ABCD
+        name: flow_rate
+      - address: 0
+        type: coil
+        data_type: bool
+        name: pump_status
+      - address: 1
+        type: coil
+        data_type: bool
+        name: valve_status
+
+  ethernetip:
+    host: enip-sim
+    device_name: demo-plc
+    collection_interval: 5s
+    request_timeout: 2s
+    reconnect_on_failure:
+      initial_interval: 2s
+      max_interval: 10s
+    tags: [temperature, pumpstatus]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  resource:
+    attributes:
+      - key: site.name
+        value: demo-site
+        action: upsert
+  batch: {}
+
+exporters:
+  # Prometheus 3 accepts OTLP directly (started with --web.enable-otlp-receiver).
+  otlp_http:
+    endpoint: http://prometheus:9090/api/v1/otlp
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [modbus, ethernetip]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_http, debug]
+  telemetry:
+    # The collector's own metrics, including otelcol_scraper_errored_metric_points,
+    # go to the same Prometheus so the dashboard can show scrape errors.
+    metrics:
+      readers:
+        - periodic:
+            interval: 10000
+            exporter:
+              otlp:
+                protocol: http/protobuf
+                endpoint: http://prometheus:9090/api/v1/otlp/v1/metrics

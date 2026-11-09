@@ -1,0 +1,112 @@
+{
+  "uid": "otel-industrial-demo",
+  "title": "OpenTelemetry Industrial Demo",
+  "description": "Simulated Modbus and EtherNet/IP devices, collected by otelcol-industrial-gateway.",
+  "tags": ["opentelemetry", "industrial"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Modbus device",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (modbus_unit_id) ({__name__=~\"modbus_device_up(_ratio)?\"})", "legendFormat": "unit {{modbus_unit_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "modbus.device.up: 1 when the device answered the last poll, 0 when it is unreachable."
+    },
+    {
+      "id": 2,
+      "title": "EtherNet/IP device",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "{{ethernetip_device_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "ethernetip.device.up: 1 when the device answered the ListIdentity check, 0 when it is unreachable."
+    },
+    {
+      "id": 3,
+      "title": "Scrape errors (failed points per second)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (receiver) (rate({__name__=~\"otelcol_scraper_errored_metric_points.*\"}[1m]))", "legendFormat": "{{receiver}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}, "unit": "short", "min": 0}, "overrides": []},
+      "description": "Points the receivers failed to read: wrong addresses or tags, or every point while a device is down. Compare with device up."
+    },
+    {
+      "id": 4,
+      "title": "Device availability over time",
+      "type": "state-timeline",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (modbus_unit_id) ({__name__=~\"modbus_device_up(_ratio)?\"})", "legendFormat": "Modbus unit {{modbus_unit_id}}"},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "EtherNet/IP {{ethernetip_device_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"showValue": "never", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    },
+    {
+      "id": 5,
+      "title": "Modbus registers",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"modbus_register_value(_ratio)?\"}", "legendFormat": "{{modbus_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}}, "overrides": [{"matcher": {"id": "byRegexp", "options": "pressure.*"}, "properties": [{"id": "custom.axisPlacement", "value": "right"}, {"id": "custom.axisLabel", "value": "pressure"}]}]},
+      "description": "Holding registers from the Modbus simulator. Pressure uses the right-hand axis."
+    },
+    {
+      "id": 6,
+      "title": "Modbus coils",
+      "type": "state-timeline",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"modbus_coil_value(_ratio)?\"}", "legendFormat": "{{modbus_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "#808080"}, "1": {"text": "ON", "color": "blue"}}}], "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"showValue": "auto", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    },
+    {
+      "id": 7,
+      "title": "EtherNet/IP temperature",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 18, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"ethernetip_tag_value.*\", ethernetip_tag_name=\"temperature\"}", "legendFormat": "temperature"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "title": "EtherNet/IP pump status",
+      "type": "state-timeline",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 18, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"ethernetip_tag_value.*\", ethernetip_tag_name=\"pumpstatus\"}", "legendFormat": "pumpstatus"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "#808080"}, "1": {"text": "ON", "color": "blue"}}}], "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"showValue": "auto", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    }
+  ]
+}
