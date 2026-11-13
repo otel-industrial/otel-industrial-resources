@@ -182,6 +182,23 @@ func closedPort(t *testing.T) uint {
 	return uint(port)
 }
 
+func TestIsBitTag(t *testing.T) {
+	for tag, want := range map[string]bool{
+		"Status.0":         true,
+		"Status.3":         true,
+		"Status.31":        true,
+		"Status.32":        false, // past gologix's 0–31 bit range
+		"Status.-1":        false,
+		"Motor.Speed":      false, // UDT member, not a bit
+		"Motor.Status.3":   true,
+		"Status":           false,
+		"Status.":          false,
+		"Program:Main.X.7": true,
+	} {
+		assert.Equal(t, want, isBitTag(tag), tag)
+	}
+}
+
 // Regression for #54: after a failed Connect, gologix has no socket, and
 // calling ListIdentity on it panicked.
 func TestClientUnreachableDoesNotPanic(t *testing.T) {
