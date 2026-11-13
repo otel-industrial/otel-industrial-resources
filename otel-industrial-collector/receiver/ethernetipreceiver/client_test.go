@@ -59,18 +59,32 @@ func startTestServer(t *testing.T, tagData map[string]any) {
 	t.Fatal("test server did not become ready in time")
 }
 
-// TestClientAgainstRealServer covers the ReadTag type-fallback path and
+// TestClientAgainstRealServer covers ReadTag for each atomic type and
 // host/port handling against a single shared real gologix.Server instance
 // (the server's fixed ports and lack of clean shutdown make running more
 // than one instance per test binary unreliable).
 func TestClientAgainstRealServer(t *testing.T) {
+	// The server encodes each Go type as the matching CIP type. It has no Go
+	// type for USINT or ULINT; it sends byte as BYTE and uint64 as LWORD.
 	startTestServer(t, map[string]any{
-		"floattag": 3.14,
-		"inttag":   int32(42),
+		"lrealtag": 3.14,
+		"realtag":  float32(21.5),
+		"sinttag":  int8(-8),
+		"inttag":   int16(-1234),
+		"dinttag":  int32(42),
+		"linttag":  int64(-5_000_000_000),
+		"uinttag":  uint16(65535),
+		"udinttag": uint32(4_000_000_000),
+		"bytetag":  byte(200),
+		"lwordtag": uint64(1) << 40,
 		"booltag":  true,
+		"falsetag": false,
+		"strtag":   "hello",
+		"intbits":  int16(0b1000),
+		"dintbits": int32(1 << 20),
 	})
 
-	t.Run("ReadTag type fallback", func(t *testing.T) {
+	t.Run("ReadTag atomic types", func(t *testing.T) {
 		client := newGologixClient("127.0.0.1", 44818, 2*time.Second)
 		require.NoError(t, client.Connect())
 
@@ -78,9 +92,23 @@ func TestClientAgainstRealServer(t *testing.T) {
 			tag  string
 			want float64
 		}{
-			{"floattag", 3.14},
-			{"inttag", 42},
+			{"lrealtag", 3.14},
+			{"realtag", 21.5},
+			{"sinttag", -8},
+			{"inttag", -1234},
+			{"dinttag", 42},
+			{"linttag", -5_000_000_000},
+			{"uinttag", 65535},
+			{"udinttag", 4_000_000_000},
+			{"bytetag", 200},
+			{"lwordtag", 1 << 40},
 			{"booltag", 1},
+			{"falsetag", 0},
+			// Bit tags read the bit, not the whole word.
+			{"intbits.3", 1},
+			{"intbits.2", 0},
+			{"dintbits.20", 1},
+			{"dintbits.3", 0},
 		}
 
 		for _, tt := range tests {
@@ -90,6 +118,16 @@ func TestClientAgainstRealServer(t *testing.T) {
 				require.InDelta(t, tt.want, got, 0.0001)
 			})
 		}
+	})
+
+	t.Run("ReadTag rejects non-atomic and missing tags", func(t *testing.T) {
+		client := newGologixClient("127.0.0.1", 44818, 2*time.Second)
+		require.NoError(t, client.Connect())
+
+		_, err := client.ReadTag("strtag")
+		assert.ErrorContains(t, err, `reading tag "strtag"`)
+		_, err = client.ReadTag("nosuchtag")
+		assert.ErrorContains(t, err, `reading tag "nosuchtag"`)
 	})
 
 	t.Run("host formats", func(t *testing.T) {
@@ -142,6 +180,23 @@ func closedPort(t *testing.T) uint {
 	port := ln.Addr().(*net.TCPAddr).Port
 	require.NoError(t, ln.Close())
 	return uint(port)
+}
+
+func TestIsBitTag(t *testing.T) {
+	for tag, want := range map[string]bool{
+		"Status.0":         true,
+		"Status.3":         true,
+		"Status.31":        true,
+		"Status.32":        false, // past gologix's 0–31 bit range
+		"Status.-1":        false,
+		"Motor.Speed":      false, // UDT member, not a bit
+		"Motor.Status.3":   true,
+		"Status":           false,
+		"Status.":          false,
+		"Program:Main.X.7": true,
+	} {
+		assert.Equal(t, want, isBitTag(tag), tag)
+	}
 }
 
 // Regression for #54: after a failed Connect, gologix has no socket, and

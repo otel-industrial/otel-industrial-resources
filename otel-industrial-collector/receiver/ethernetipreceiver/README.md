@@ -34,18 +34,22 @@ Tags are addressed by symbolic name using the Logix Symbol Object, via the
 
 ### Supported tag data types
 
-Each tag value is converted to a `float64`. The following Logix data types can
-be read today:
+Each tag is read with one request and its value converted to a `float64`,
+based on the type the controller reports. The following Logix data types can
+be read:
 
 | Logix type | Reported as |
 |---|---|
-| `LREAL` | the value |
-| `DINT` | the value |
+| `REAL`, `LREAL` | the value |
+| `SINT`, `INT`, `DINT`, `LINT` | the value |
+| `USINT`, `UINT`, `UDINT` | the value |
 | `BOOL` | `1` (true) or `0` (false) |
 
-Other types, including `REAL`, `SINT`, `INT`, `LINT`, the unsigned integer
-types, `STRING`, arrays and UDTs, are **not read** at this stage: the tag is
+`LINT` values beyond 2^53 lose precision because they are reported as doubles.
+
+`ULINT`, `STRING`, arrays and UDTs are **not read** at this stage: the tag is
 reported as a failed tag (see [Behavior](#behavior)) and skipped on each scrape.
+`ULINT` is not decoded by the `gologix` client library yet.
 
 ## Prerequisites
 
@@ -174,9 +178,9 @@ know the engineering unit of a tag.
   are still emitted. A request to a device that stops answering fails after
   `request_timeout`. The deadline is checked between tags, so a tag read
   already in flight is not interrupted. Against a device that stops answering,
-  one tag read can take up to about four times `request_timeout` (the client
-  tries up to three data types and reconnects between them), so in the worst
-  case a scrape takes `timeout` plus that. Without a `timeout`, every remaining
+  one tag read can take up to about twice `request_timeout` (the client
+  reconnects after the failed read), so in the worst case a scrape takes
+  `timeout` plus that. Without a `timeout`, every remaining
   tag in the scrape fails the same way, so set one when reading many tags.
 - **Reporting failed tags:** Failed and skipped tags are returned to the
   collector as one partial scrape error per scrape. The collector logs one
@@ -185,8 +189,8 @@ know the engineering unit of a tag.
   are still emitted.
 - **Several receivers on one device:** Scrapes to the same `host` and `port`
   are serialized across the collector, so receivers sharing a PLC take turns.
-- **Load on the device:** Tags are read one request at a time. Unsupported tag
-  types cost up to three requests per scrape. Keep `collection_interval`
+- **Load on the device:** Tags are read one request at a time, one request per
+  tag. Keep `collection_interval`
   conservative on production controllers.
 
 ## Using this receiver in a collector
