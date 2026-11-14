@@ -59,6 +59,54 @@ func (ms *ModbusCoilValueMetricConfig) Validate() error {
 	return nil
 }
 
+// ModbusDeviceUpMetricAttributeKey specifies the key of an attribute for the modbus.device.up metric.
+type ModbusDeviceUpMetricAttributeKey string
+
+const (
+	ModbusDeviceUpMetricAttributeKeyModbusUnitID ModbusDeviceUpMetricAttributeKey = "modbus.unit_id"
+)
+
+// ModbusDeviceUpMetricConfig provides config for the modbus.device.up metric.
+type ModbusDeviceUpMetricConfig struct {
+	Enabled          bool `mapstructure:"enabled"`
+	enabledSetByUser bool
+
+	AggregationStrategy string                             `mapstructure:"aggregation_strategy"`
+	EnabledAttributes   []ModbusDeviceUpMetricAttributeKey `mapstructure:"attributes"`
+}
+
+func (ms *ModbusDeviceUpMetricConfig) Unmarshal(parser *confmap.Conf) error {
+	if parser == nil {
+		return nil
+	}
+
+	err := parser.Unmarshal(ms)
+	if err != nil {
+		return err
+	}
+
+	ms.enabledSetByUser = parser.IsSet("enabled")
+	return nil
+}
+
+func (ms *ModbusDeviceUpMetricConfig) Validate() error {
+	for _, val := range ms.EnabledAttributes {
+		switch val {
+		case ModbusDeviceUpMetricAttributeKeyModbusUnitID:
+		default:
+			return fmt.Errorf("metric modbus.device.up doesn't have an attribute %v, valid attributes: [modbus.unit_id]", val)
+		}
+	}
+
+	switch ms.AggregationStrategy {
+	case AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax:
+	default:
+		return fmt.Errorf("invalid aggregation strategy %q, valid strategies: [%s, %s, %s, %s]", ms.AggregationStrategy, AggregationStrategySum, AggregationStrategyAvg, AggregationStrategyMin, AggregationStrategyMax)
+	}
+
+	return nil
+}
+
 // ModbusRegisterValueMetricAttributeKey specifies the key of an attribute for the modbus.register.value metric.
 type ModbusRegisterValueMetricAttributeKey string
 
@@ -115,6 +163,7 @@ func (ms *ModbusRegisterValueMetricConfig) Validate() error {
 // MetricsConfig provides config for modbus metrics.
 type MetricsConfig struct {
 	ModbusCoilValue     ModbusCoilValueMetricConfig     `mapstructure:"modbus.coil.value"`
+	ModbusDeviceUp      ModbusDeviceUpMetricConfig      `mapstructure:"modbus.device.up"`
 	ModbusRegisterValue ModbusRegisterValueMetricConfig `mapstructure:"modbus.register.value"`
 }
 
@@ -124,6 +173,11 @@ func DefaultMetricsConfig() MetricsConfig {
 			Enabled:             true,
 			AggregationStrategy: AggregationStrategyAvg,
 			EnabledAttributes:   []ModbusCoilValueMetricAttributeKey{ModbusCoilValueMetricAttributeKeyModbusName, ModbusCoilValueMetricAttributeKeyModbusRegisterAddress, ModbusCoilValueMetricAttributeKeyModbusRegisterType, ModbusCoilValueMetricAttributeKeyModbusUnitID},
+		},
+		ModbusDeviceUp: ModbusDeviceUpMetricConfig{
+			Enabled:             true,
+			AggregationStrategy: AggregationStrategyAvg,
+			EnabledAttributes:   []ModbusDeviceUpMetricAttributeKey{ModbusDeviceUpMetricAttributeKeyModbusUnitID},
 		},
 		ModbusRegisterValue: ModbusRegisterValueMetricConfig{
 			Enabled:             true,

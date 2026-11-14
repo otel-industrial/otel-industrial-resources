@@ -29,6 +29,20 @@ The value read from a Modbus coil or discrete input (0 or 1).
 | modbus.register_type | The type of Modbus register bank. | Str: ``coil``, ``discrete_input``, ``holding_register``, ``input_register`` | Recommended | - |
 | modbus.unit_id | The Modbus unit/slave ID. | Any Int | Recommended | - |
 
+### modbus.device.up
+
+Whether the device responded to the last poll (1) or not (0).
+
+| Unit | Metric Type | Value Type | Stability |
+| ---- | ----------- | ---------- | --------- |
+| 1 | Gauge | Int | Development |
+
+#### Attributes
+
+| Name | Description | Values | Requirement Level | Semantic Convention |
+| ---- | ----------- | ------ | ----------------- | ------------------- |
+| modbus.unit_id | The Modbus unit/slave ID. | Any Int | Recommended | - |
+
 ### modbus.register.value
 
 The decoded value read from a Modbus holding or input register.

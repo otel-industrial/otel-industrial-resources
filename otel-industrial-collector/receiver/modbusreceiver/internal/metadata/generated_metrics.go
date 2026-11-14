@@ -155,6 +155,10 @@ var MetricsInfo = metricsInfo{
 		Name:       "modbus.coil.value",
 		Attributes: []string{"modbus.name", "modbus.register_address", "modbus.register_type", "modbus.unit_id"},
 	},
+	ModbusDeviceUp: metricInfo{
+		Name:       "modbus.device.up",
+		Attributes: []string{"modbus.unit_id"},
+	},
 	ModbusRegisterValue: metricInfo{
 		Name:       "modbus.register.value",
 		Attributes: []string{"modbus.byte_order", "modbus.data_type", "modbus.name", "modbus.register_address", "modbus.register_type", "modbus.unit_id"},
@@ -163,6 +167,7 @@ var MetricsInfo = metricsInfo{
 
 type metricsInfo struct {
 	ModbusCoilValue     metricInfo
+	ModbusDeviceUp      metricInfo
 	ModbusRegisterValue metricInfo
 }
 
@@ -263,6 +268,97 @@ func (m *metricModbusCoilValue) emit(metrics pmetric.MetricSlice) {
 
 func newMetricModbusCoilValue(cfg ModbusCoilValueMetricConfig) metricModbusCoilValue {
 	m := metricModbusCoilValue{config: cfg}
+
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
+type metricModbusDeviceUp struct {
+	data          pmetric.Metric             // data buffer for generated metric.
+	config        ModbusDeviceUpMetricConfig // metric config provided by user.
+	capacity      int                        // max observed number of data points added to the metric.
+	aggDataPoints []int64                    // slice containing number of aggregated datapoints at each index
+	dpIndex       map[uint64]int             // maps a data point's hash to its index, for O(1) dedup lookup.
+}
+
+// init fills modbus.device.up metric with initial data.
+func (m *metricModbusDeviceUp) init() {
+	m.data.SetName("modbus.device.up")
+	m.data.SetDescription("Whether the device responded to the last poll (1) or not (0).")
+	m.data.SetUnit("1")
+	m.data.SetEmptyGauge()
+	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+	m.aggDataPoints = m.aggDataPoints[:0]
+	m.dpIndex = make(map[uint64]int, m.capacity)
+}
+
+func (m *metricModbusDeviceUp) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, modbusUnitIDAttributeValue int64) {
+	if !m.config.Enabled {
+		return
+	}
+
+	dp := pmetric.NewNumberDataPoint()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	if slices.Contains(m.config.EnabledAttributes, ModbusDeviceUpMetricAttributeKeyModbusUnitID) {
+		dp.Attributes().PutInt("modbus.unit_id", modbusUnitIDAttributeValue)
+	}
+
+	var s string
+	key := dataPointKey(dp)
+	dps := m.data.Gauge().DataPoints()
+	if i, ok := m.dpIndex[key]; ok {
+		dpi := dps.At(i)
+		switch s = m.config.AggregationStrategy; s {
+		case AggregationStrategySum, AggregationStrategyAvg:
+			dpi.SetIntValue(dpi.IntValue() + val)
+			m.aggDataPoints[i] += 1
+			return
+		case AggregationStrategyMin:
+			if dpi.IntValue() > val {
+				dpi.SetIntValue(val)
+			}
+			return
+		case AggregationStrategyMax:
+			if dpi.IntValue() < val {
+				dpi.SetIntValue(val)
+			}
+			return
+		}
+	}
+
+	dp.SetIntValue(val)
+	m.aggDataPoints = append(m.aggDataPoints, 1)
+	m.dpIndex[key] = dps.Len()
+	dp.MoveTo(dps.AppendEmpty())
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricModbusDeviceUp) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricModbusDeviceUp) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		if m.config.AggregationStrategy == AggregationStrategyAvg {
+			for i, aggCount := range m.aggDataPoints {
+				m.data.Gauge().DataPoints().At(i).SetIntValue(m.data.Gauge().DataPoints().At(i).IntValue() / aggCount)
+			}
+		}
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricModbusDeviceUp(cfg ModbusDeviceUpMetricConfig) metricModbusDeviceUp {
+	m := metricModbusDeviceUp{config: cfg}
 
 	if cfg.Enabled {
 		m.data = pmetric.NewMetric()
@@ -386,6 +482,7 @@ type MetricsBuilder struct {
 	metricsBuffer             pmetric.Metrics      // accumulates metrics data before emitting.
 	buildInfo                 component.BuildInfo  // contains version information.
 	metricModbusCoilValue     metricModbusCoilValue
+	metricModbusDeviceUp      metricModbusDeviceUp
 	metricModbusRegisterValue metricModbusRegisterValue
 }
 
@@ -413,6 +510,7 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, opt
 		metricsBuffer:             pmetric.NewMetrics(),
 		buildInfo:                 settings.BuildInfo,
 		metricModbusCoilValue:     newMetricModbusCoilValue(mbc.Metrics.ModbusCoilValue),
+		metricModbusDeviceUp:      newMetricModbusDeviceUp(mbc.Metrics.ModbusDeviceUp),
 		metricModbusRegisterValue: newMetricModbusRegisterValue(mbc.Metrics.ModbusRegisterValue),
 	}
 
@@ -480,6 +578,7 @@ func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricModbusCoilValue.emit(ils.Metrics())
+	mb.metricModbusDeviceUp.emit(ils.Metrics())
 	mb.metricModbusRegisterValue.emit(ils.Metrics())
 
 	for _, op := range options {
@@ -505,6 +604,11 @@ func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics
 // RecordModbusCoilValueDataPoint adds a data point to modbus.coil.value metric.
 func (mb *MetricsBuilder) RecordModbusCoilValueDataPoint(ts pcommon.Timestamp, val int64, modbusNameAttributeValue string, modbusRegisterAddressAttributeValue int64, modbusRegisterTypeAttributeValue AttributeModbusRegisterType, modbusUnitIDAttributeValue int64) {
 	mb.metricModbusCoilValue.recordDataPoint(mb.startTime, ts, val, modbusNameAttributeValue, modbusRegisterAddressAttributeValue, modbusRegisterTypeAttributeValue.String(), modbusUnitIDAttributeValue)
+}
+
+// RecordModbusDeviceUpDataPoint adds a data point to modbus.device.up metric.
+func (mb *MetricsBuilder) RecordModbusDeviceUpDataPoint(ts pcommon.Timestamp, val int64, modbusUnitIDAttributeValue int64) {
+	mb.metricModbusDeviceUp.recordDataPoint(mb.startTime, ts, val, modbusUnitIDAttributeValue)
 }
 
 // RecordModbusRegisterValueDataPoint adds a data point to modbus.register.value metric.

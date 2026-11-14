@@ -69,6 +69,16 @@ metrics:
       - modbus.register_type
       - modbus.unit_id
 
+  modbus.device.up:
+    enabled: true
+    description: Whether the device responded to the last poll (1) or not (0).
+    unit: "1"
+    stability: development
+    gauge:
+      value_type: int
+    attributes:
+      - modbus.unit_id
+
   modbus.register.value:
     enabled: true
     description: The decoded value read from a Modbus holding or input register.
