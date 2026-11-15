@@ -16,7 +16,9 @@ and the roadmap live in [DESIGN.md](./DESIGN.md).
 
 > Version alignment: `ocb`, `otelcol_version` in `builder-config.yaml`, and the
 > collector dependencies in `go.mod` must all match. This component currently
-> targets ocb v0.163.0 with collector modules at v1.69.0 / v0.163.0.
+> targets ocb v0.163.0 with collector modules at v1.69.0 / v0.163.0. CI fails
+> when they differ, and `make update-otel` at the repo root bumps them all
+> together (see [docs/release.md](../../../docs/release.md)).
 
 ## Make targets
 

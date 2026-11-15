@@ -7,20 +7,23 @@ on:
       - 'otel-industrial-collector/**'
       - '.github/workflows/build.yml'
       - '.github/scripts/retry.sh'
+      - '.github/scripts/select-dists.sh'
   pull_request:
     paths:
       - 'otel-industrial-collector/**'
       - '.github/workflows/build.yml'
       - '.github/scripts/retry.sh'
+      - '.github/scripts/select-dists.sh'
 
 permissions:
   contents: read
 
 jobs:
-  # Select which manifests to build. On a PR, build only the manifests whose
-  # yaml changed; a shared input (Makefile, this workflow, retry.sh) rebuilds
-  # all. On push to main, build all. Manifest builds pin their receiver/contrib
-  # deps by version, so in-repo module source changes do not affect them.
+  # Select which manifests to build. On a PR, build the manifests whose yaml
+  # changed and every manifest that uses a changed in-repo module; a shared
+  # input (Makefile, this workflow, the build scripts) rebuilds all. On push to
+  # main, build all. Builds use `make LOCAL=1`, so they compile the in-repo
+  # modules from the checkout.
   detect:
     runs-on: ubuntu-latest
     outputs:
@@ -31,23 +34,16 @@ jobs:
           fetch-depth: 0
       - name: Select manifests
         id: select
-        working-directory: otel-industrial-collector/manifests
         env:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          all() { for f in *.yaml; do basename "$f" .yaml; done | jq -R . | jq -cs .; }
           if [ "$EVENT" != "pull_request" ]; then
-            echo "dists=$(all)" >> "$GITHUB_OUTPUT"; exit 0
+            echo "dists=$(sh .github/scripts/select-dists.sh --all)" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git fetch --no-tags origin "$BASE_REF"
-          changed="$(git diff --name-only --diff-filter=d "$(git rev-parse FETCH_HEAD)...HEAD")"
-          if echo "$changed" | grep -qE '^otel-industrial-collector/manifests/Makefile$|^\.github/workflows/build\.yml$|^\.github/scripts/retry\.sh$'; then
-            echo "dists=$(all)" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          sel="$(echo "$changed" | sed -n 's#^otel-industrial-collector/manifests/\([^/]*\)\.yaml$#\1#p' | jq -R . | jq -cs .)"
-          echo "dists=${sel}" >> "$GITHUB_OUTPUT"
+          echo "dists=$(sh .github/scripts/select-dists.sh FETCH_HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: detect
