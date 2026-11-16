@@ -8,12 +8,12 @@
 dist:
   name: otelcol-modbus-edge
   description: Minimal OpenTelemetry Collector for Modbus edge gateways
-  version: 0.0.1
+  version: 0.1.0
   output_path: ./otelcol-modbus-edge
   otelcol_version: 0.163.0
 
 receivers:
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.0.1
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.1.0
 
 processors:
   - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.163.0

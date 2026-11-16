@@ -9,7 +9,7 @@
 dist:
   name: otelcol-sparkplug
   description: Minimal OpenTelemetry Collector for MQTT Sparkplug B / IIoT
-  version: 0.0.1
+  version: 0.1.0
   output_path: ./otelcol-sparkplug
   otelcol_version: 0.163.0
 
