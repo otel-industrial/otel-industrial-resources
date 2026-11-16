@@ -13,6 +13,8 @@ receivers:
       - testtag
       - temperature
       - pumpstatus
+      - flowrate
+      - pressure
 
 exporters:
   debug:
