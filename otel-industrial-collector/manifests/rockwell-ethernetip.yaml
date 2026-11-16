@@ -7,12 +7,12 @@
 dist:
   name: otelcol-ethernetip
   description: Minimal OpenTelemetry Collector for Rockwell/Allen-Bradley EtherNet/IP cells
-  version: 0.0.1
+  version: 0.1.0
   output_path: ./otelcol-ethernetip
   otelcol_version: 0.163.0
 
 receivers:
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.1.0
 
 processors:
   - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.163.0

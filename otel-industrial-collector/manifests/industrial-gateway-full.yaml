@@ -13,13 +13,13 @@
 dist:
   name: otelcol-industrial-gateway
   description: Full multi-protocol OpenTelemetry Collector for industrial gateways
-  version: 0.0.1
+  version: 0.1.0
   output_path: ./otelcol-industrial-gateway
   otelcol_version: 0.163.0
 
 receivers:
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.0.1
-  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.0.1
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/modbusreceiver v0.1.0
+  - gomod: github.com/otel-industrial/otel-industrial-resources/otel-industrial-collector/receiver/ethernetipreceiver v0.1.0
   # Subdirectory / untagged modules pinned via pseudo-version (see per-protocol manifests).
   - gomod: github.com/bruegth/opentelemetry-collector-opcua-receiver/receiver/opcua v0.0.0-20260603175247-91d3129184f0
   - gomod: github.com/jmacd/opentelemetry-mqtt-sparkplug v0.0.0-20260526170218-8540b400c6d8
