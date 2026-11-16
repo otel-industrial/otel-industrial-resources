@@ -41,4 +41,12 @@ Community-maintained catalog of OpenTelemetry projects, integrations, collectors
 
 The goal is to help practitioners discover existing work, identify collaboration opportunities, avoid duplicated efforts, and better understand the current state of industrial observability within the OpenTelemetry ecosystem.
 
-###
+### Repository tooling
+
+- [`versions.yaml`](versions.yaml) and the root [`Makefile`](Makefile): lockstep versioning with multimod (`make prepare-release`, `make push-tags`) and dependency bumps (`make update-otel`)
+- [`internal/tools`](internal/tools): pinned build tools
+- Release process: [`docs/release.md`](docs/release.md)
+
+## Get Involved
+
+Join us on CNCF Slack in **#otel-industrial**, check the [open issues](https://github.com/otel-industrial/otel-industrial-resources/issues) and the [roadmap](https://github.com/orgs/otel-industrial/projects/1), and see [otel-industrial-community](https://github.com/otel-industrial/otel-industrial-community) for meetings and notes.
