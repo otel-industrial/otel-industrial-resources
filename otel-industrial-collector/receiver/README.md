@@ -2,16 +2,16 @@
 
 This directory is a discovery point for OpenTelemetry Collector receivers relevant to industrial, OT, and IIoT environments. Some receivers live directly in this repository; others are maintained in separate projects and are referenced here with a short summary and a link.
 
-The goal is to make it easy to find existing work on a given protocol before starting something new, and to give a sense of what components might eventually be considered for an OpenTelemetry Industrial Collector distribution.
+The goal is to make it easy to find existing work on a given protocol before starting something new. All four receivers below are included in the [OpenTelemetry Industrial Collector distributions](../manifests).
 
 ## Receivers
 
-| Protocol | Status | Location |
-|---|---|---|
-| [EtherNet/IP](./ethernetipreceiver/README.md) | In this repository (development: metrics) | [ethernetipreceiver](./ethernetipreceiver) |
-| [Modbus](./modbusreceiver/README.md) | In this repository (development: metrics) | [modbusreceiver](./modbusreceiver) |
-| [OPC UA](./opcuareceiver/README.md) | External project (logs only, alpha) | [bruegth/opentelemetry-collector-opcua-receiver](https://github.com/bruegth/opentelemetry-collector-opcua-receiver) |
-| [MQTT / Sparkplug B](./mqttsparkplugreceiver/README.md) | External project | [jmacd/opentelemetry-mqtt-sparkplug](https://github.com/jmacd/opentelemetry-mqtt-sparkplug) |
+| Protocol | Status | Location | Distributions |
+|---|---|---|---|
+| EtherNet/IP | In this repository, [v0.1.0](https://github.com/otel-industrial/otel-industrial-resources/releases/tag/v0.1.0) (development: metrics) | [ethernetipreceiver](ethernetipreceiver) | `rockwell-ethernetip`, `industrial-gateway-full` |
+| Modbus | In this repository, [v0.1.0](https://github.com/otel-industrial/otel-industrial-resources/releases/tag/v0.1.0) (development: metrics) | [modbusreceiver](modbusreceiver) | `modbus-edge-gateway`, `industrial-gateway-full` |
+| OPC UA | External project (logs only, alpha) | [bruegth/opentelemetry-collector-opcua-receiver](opcuareceiver/README.md) | `opcua-plant-floor`, `industrial-gateway-full` |
+| MQTT / Sparkplug B | External project | [jmacd/opentelemetry-mqtt-sparkplug](mqttsparkplugreceiver/README.md) | `iiot-sparkplug`, `industrial-gateway-full` |
 
 ## Contributing
 
