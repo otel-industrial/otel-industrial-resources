@@ -10,8 +10,8 @@ The goal is to make it easy to find existing work on a given protocol before sta
 |---|---|---|---|
 | EtherNet/IP | In this repository, [v0.1.0](https://github.com/otel-industrial/otel-industrial-resources/releases/tag/v0.1.0) (development: metrics) | [ethernetipreceiver](ethernetipreceiver) | `rockwell-ethernetip`, `industrial-gateway-full` |
 | Modbus | In this repository, [v0.1.0](https://github.com/otel-industrial/otel-industrial-resources/releases/tag/v0.1.0) (development: metrics) | [modbusreceiver](modbusreceiver) | `modbus-edge-gateway`, `industrial-gateway-full` |
-| OPC UA | External project (logs only, alpha) | [bruegth/opentelemetry-collector-opcua-receiver](https://github.com/bruegth/opentelemetry-collector-opcua-receiver) | `opcua-plant-floor`, `industrial-gateway-full` |
-| MQTT / Sparkplug B | External project | [jmacd/opentelemetry-mqtt-sparkplug](https://github.com/jmacd/opentelemetry-mqtt-sparkplug) | `iiot-sparkplug`, `industrial-gateway-full` |
+| OPC UA | External project (logs only, alpha) | [bruegth/opentelemetry-collector-opcua-receiver](opcuareceiver/README.md) | `opcua-plant-floor`, `industrial-gateway-full` |
+| MQTT / Sparkplug B | External project | [jmacd/opentelemetry-mqtt-sparkplug](mqttsparkplugreceiver/README.md) | `iiot-sparkplug`, `industrial-gateway-full` |
 
 ## Contributing
 
