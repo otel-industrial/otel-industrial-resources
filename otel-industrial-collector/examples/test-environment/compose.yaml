@@ -25,6 +25,12 @@ services:
     depends_on: [modbus-sim]     # built by modbus-sim
     command: ["enip-simulator"]
 
+  sparkplug-sim:
+    image: otel-industrial-demo:local
+    pull_policy: never
+    depends_on: [gateway]        # publishes to the broker inside the gateway
+    command: ["sparkplug-simulator", "-broker", "tcp://gateway:1883"]
+
   gateway:
     image: otel-industrial-demo:local
     pull_policy: never

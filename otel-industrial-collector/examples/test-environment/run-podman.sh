@@ -14,7 +14,7 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 NET=otel-industrial-demo
 IMAGE=otel-industrial-demo:local
-CONTAINERS=(grafana gateway prometheus enip-sim modbus-sim)
+CONTAINERS=(grafana sparkplug-sim gateway prometheus enip-sim modbus-sim)
 
 down() {
   for c in "${CONTAINERS[@]}"; do podman rm -f "$NET-$c" >/dev/null 2>&1 || true; done
@@ -41,6 +41,7 @@ run prometheus -p 127.0.0.1:9090:9090 \
   --config.file=/etc/prometheus/prometheus.yaml --storage.tsdb.path=/prometheus --web.enable-otlp-receiver
 run gateway -v "$PWD/collector.yaml:/etc/otelcol/collector.yaml:ro" \
   "$IMAGE" otelcol-industrial-gateway --config /etc/otelcol/collector.yaml
+run sparkplug-sim "$IMAGE" sparkplug-simulator -broker tcp://gateway:1883
 run grafana -p 127.0.0.1:3000:3000 \
   -e GF_AUTH_ANONYMOUS_ENABLED=true -e GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer \
   -e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/industrial-demo.json \

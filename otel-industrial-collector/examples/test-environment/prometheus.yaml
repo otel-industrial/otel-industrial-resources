@@ -9,6 +9,8 @@ otlp:
     - ethernetip.device.address
     - ethernetip.device.name
     - site.name
+    - group_id
+    - device_id
 
 storage:
   tsdb:

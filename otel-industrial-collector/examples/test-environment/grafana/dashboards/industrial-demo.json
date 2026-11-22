@@ -1,7 +1,7 @@
 {
   "uid": "otel-industrial-demo",
   "title": "OpenTelemetry Industrial Demo",
-  "description": "Simulated Modbus and EtherNet/IP devices, collected by otelcol-industrial-gateway.",
+  "description": "Simulated Modbus, EtherNet/IP and Sparkplug B devices, collected by otelcol-industrial-gateway.",
   "tags": ["opentelemetry", "industrial"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -15,7 +15,7 @@
       "title": "Modbus device",
       "type": "stat",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 5},
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 5},
       "targets": [
         {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (modbus_unit_id) ({__name__=~\"modbus_device_up(_ratio)?\"})", "legendFormat": "unit {{modbus_unit_id}}"}
       ],
@@ -28,13 +28,26 @@
       "title": "EtherNet/IP device",
       "type": "stat",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 5},
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 5},
       "targets": [
         {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "{{ethernetip_device_name}}"}
       ],
       "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
       "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
       "description": "ethernetip.device.up: 1 when the device answered the ListIdentity check, 0 when it is unreachable."
+    },
+    {
+      "id": 9,
+      "title": "Sparkplug B device",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (device_id) ({__name__=~\"staleness(_seconds)?\"} < bool 15)", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "Sparkplug B devices push data, so there is no device.up metric. This uses the receiver's staleness metric (seconds since the device last sent data, reported every 30 seconds): UP below 15 seconds, DOWN when the device has gone silent."
     },
     {
       "id": 3,
@@ -56,7 +69,8 @@
       "gridPos": {"x": 0, "y": 5, "w": 24, "h": 5},
       "targets": [
         {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (modbus_unit_id) ({__name__=~\"modbus_device_up(_ratio)?\"})", "legendFormat": "Modbus unit {{modbus_unit_id}}"},
-        {"refId": "B", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "EtherNet/IP {{ethernetip_device_name}}"}
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "EtherNet/IP {{ethernetip_device_name}}"},
+        {"refId": "C", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (device_id) ({__name__=~\"staleness(_seconds)?\"} < bool 15)", "legendFormat": "Sparkplug B {{device_id}}"}
       ],
       "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
       "options": {"showValue": "never", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
@@ -107,6 +121,42 @@
       ],
       "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "#808080"}, "1": {"text": "ON", "color": "blue"}}}], "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
       "options": {"showValue": "auto", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    },
+    {
+      "id": 10,
+      "title": "Sparkplug B motor speed",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "motor_speed", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}, "unit": "rotrpm"}, "overrides": []},
+      "description": "motor_speed from the Sparkplug B simulator's conveyor. The simulator sends DDATA every 5 seconds; the receiver reports the latest values every 30 seconds."
+    },
+    {
+      "id": 11,
+      "title": "Sparkplug B motor temperature",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 26, "w": 8, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "motor_temperature", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}, "unit": "celsius"}, "overrides": []}
+    },
+    {
+      "id": 12,
+      "title": "Parts produced",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 20, "y": 26, "w": 4, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (device_id) (parts_produced)", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "blue"}, "unit": "short"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "description": "parts_produced counter from the Sparkplug B simulator. It restarts at zero when the simulator restarts."
     }
   ]
 }

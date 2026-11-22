@@ -50,6 +50,16 @@ receivers:
       max_interval: 10s
     tags: [temperature, pumpstatus]
 
+  # Sparkplug B: the receiver runs the MQTT broker itself (self_hosted), and
+  # the simulator publishes to it over the demo network. Port 1883 is not
+  # published to your machine.
+  sparkplug:
+    broker:
+      endpoint: 0.0.0.0:1883
+      transport: tcp
+      self_hosted: true
+      host_id: demo-gateway
+
 processors:
   memory_limiter:
     check_interval: 1s
@@ -76,7 +86,7 @@ service:
   extensions: [health_check]
   pipelines:
     metrics:
-      receivers: [modbus, ethernetip]
+      receivers: [modbus, ethernetip, sparkplug]
       processors: [memory_limiter, resource, batch]
       exporters: [otlp_http, debug]
   telemetry:
