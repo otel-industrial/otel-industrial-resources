@@ -1,0 +1,13 @@
+# Weaver registry manifest for the industrial semantic conventions.
+# Status: development. See ../README.md.
+
+name: industrial
+description: >-
+  OpenTelemetry semantic conventions for industrial, OT and IIoT environments.
+# Placeholder until schemas are published; the last path segment is the
+# registry version.
+schema_url: https://otel-industrial.github.io/schemas/industrial/0.0.1
+
+dependencies:
+  - name: otel
+    registry_path: https://github.com/open-telemetry/semantic-conventions/archive/refs/tags/v1.42.0.zip[model]
