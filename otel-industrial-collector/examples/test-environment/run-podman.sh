@@ -75,6 +75,8 @@ run grafana -p 127.0.0.1:3000:3000 \
   -e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/industrial-demo.json \
   -e GF_ANALYTICS_REPORTING_ENABLED=false -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
   -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+  -e GF_SECURITY_DISABLE_GRAVATAR=true -e GF_NEWS_NEWS_FEED_ENABLED=false \
+  -e GF_SNAPSHOTS_EXTERNAL_ENABLED=false \
   -v "$PWD/grafana/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml:ro" \
   -v "$PWD/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro" \
   -v "$PWD/grafana/dashboards:/var/lib/grafana/dashboards:ro" \

@@ -55,6 +55,11 @@ the OPC UA server and Loki are only reachable inside the demo network.
 
 ## What you should see
 
+![The OpenTelemetry Industrial Demo dashboard: four device tiles, the availability timeline, Modbus, EtherNet/IP and Sparkplug B charts, and OPC UA logs](dashboard.png)
+
+*The red gap on the timeline is the Modbus simulator stopped for a minute and
+started again, as described in [Try it](#try-it-take-a-device-offline).*
+
 - **Device status:** `modbus.device.up` and `ethernetip.device.up` show UP, and
   so does the Sparkplug B device. Sparkplug B devices push data, so there is
   no `device.up` metric for them: the tile uses the receiver's `staleness`
