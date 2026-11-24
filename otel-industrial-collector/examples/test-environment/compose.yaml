@@ -1,5 +1,5 @@
 # OpenTelemetry Industrial test environment: simulated devices, the
-# otelcol-industrial-gateway distribution, Prometheus and Grafana.
+# otelcol-industrial-gateway distribution, Prometheus, Loki and Grafana.
 #
 #   cd otel-industrial-collector/examples/test-environment
 #   docker compose up --build        # or: podman compose up --build
@@ -31,10 +31,28 @@ services:
     depends_on: [gateway]        # publishes to the broker inside the gateway
     command: ["sparkplug-simulator", "-broker", "tcp://gateway:1883"]
 
+  opcua-sim:
+    image: otel-industrial-demo-opcua-sim:local
+    build:
+      # The OPC UA receiver project's own test server, at the same commit as
+      # the OCB manifests. The first build downloads the .NET SDK image.
+      context: https://github.com/bruegth/opentelemetry-collector-opcua-receiver.git#91d3129184f0439fb1a744e41096e68b1bc37392:testserver
+    healthcheck:
+      # The receiver aborts collector startup if the server isn't listening yet.
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/4840"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
   gateway:
     image: otel-industrial-demo:local
     pull_policy: never
-    depends_on: [modbus-sim, enip-sim, prometheus]
+    depends_on:
+      modbus-sim: {condition: service_started}
+      enip-sim: {condition: service_started}
+      prometheus: {condition: service_started}
+      loki: {condition: service_started}
+      opcua-sim: {condition: service_healthy}
     command: ["otelcol-industrial-gateway", "--config", "/etc/otelcol/collector.yaml"]
     volumes:
       - ./collector.yaml:/etc/otelcol/collector.yaml:ro
@@ -50,9 +68,12 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
 
+  loki:
+    image: grafana/loki:3.5.0    # OTLP logs on :3100/otlp; not published
+
   grafana:
     image: grafana/grafana:11.6.0
-    depends_on: [prometheus]
+    depends_on: [prometheus, loki]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

@@ -14,7 +14,14 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 NET=otel-industrial-demo
 IMAGE=otel-industrial-demo:local
-CONTAINERS=(grafana sparkplug-sim gateway prometheus enip-sim modbus-sim)
+CONTAINERS=(grafana sparkplug-sim gateway opcua-sim loki prometheus enip-sim modbus-sim)
+
+# The OPC UA receiver project's own test server (C#), built from its repo at
+# the same commit as the OCB manifests.
+OPCUA_REPO=https://github.com/bruegth/opentelemetry-collector-opcua-receiver.git
+OPCUA_COMMIT=91d3129184f0439fb1a744e41096e68b1bc37392
+OPCUA_IMAGE=otel-industrial-demo-opcua-sim:local
+OPCUA_SRC="${TMPDIR:-/tmp}/otel-industrial-demo-opcua"
 
 down() {
   for c in "${CONTAINERS[@]}"; do podman rm -f "$NET-$c" >/dev/null 2>&1 || true; done
@@ -26,6 +33,14 @@ down
 
 echo "==> Building $IMAGE (the first build downloads Go modules and takes a few minutes)"
 podman build -t "$IMAGE" -f Dockerfile "$REPO_ROOT"
+
+echo "==> Building $OPCUA_IMAGE (the first build downloads the .NET SDK image)"
+if [ "$(git -C "$OPCUA_SRC" rev-parse HEAD 2>/dev/null)" != "$OPCUA_COMMIT" ]; then
+  rm -rf "$OPCUA_SRC"
+  git clone -q "$OPCUA_REPO" "$OPCUA_SRC"
+  git -C "$OPCUA_SRC" checkout -q "$OPCUA_COMMIT"
+fi
+podman build -t "$OPCUA_IMAGE" "$OPCUA_SRC/testserver"
 
 podman network create "$NET" >/dev/null
 
@@ -39,6 +54,19 @@ run prometheus -p 127.0.0.1:9090:9090 \
   -v "$PWD/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro" \
   prom/prometheus:v3.5.0 \
   --config.file=/etc/prometheus/prometheus.yaml --storage.tsdb.path=/prometheus --web.enable-otlp-receiver
+run loki grafana/loki:3.5.0
+run opcua-sim "$OPCUA_IMAGE"
+
+# The OPC UA receiver aborts collector startup if the server isn't listening
+# yet, so wait for port 4840 before starting the gateway.
+echo "==> Waiting for the OPC UA test server"
+ready=
+for _ in $(seq 1 60); do
+  if podman exec "$NET-opcua-sim" bash -c 'echo > /dev/tcp/127.0.0.1/4840' 2>/dev/null; then ready=1; break; fi
+  sleep 1
+done
+[ -n "$ready" ] || { echo "OPC UA test server did not start; see: podman logs $NET-opcua-sim"; exit 1; }
+
 run gateway -v "$PWD/collector.yaml:/etc/otelcol/collector.yaml:ro" \
   "$IMAGE" otelcol-industrial-gateway --config /etc/otelcol/collector.yaml
 run sparkplug-sim "$IMAGE" sparkplug-simulator -broker tcp://gateway:1883
