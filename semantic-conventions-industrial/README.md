@@ -36,10 +36,24 @@ From the discussion in
 
 ## Layout
 
-    model/                    Weaver registry: YAML definitions
+    model/                    Weaver registry: YAML definitions (source of truth)
       manifest.yaml           Registry name, version and its dependency on
                               the core semantic conventions
     check.sh                  Validates the registry with OpenTelemetry Weaver
+
+What goes where, as content arrives:
+
+- **`model/`**: attribute, metric and entity definitions in YAML, for example
+  `model/industrial/registry.yaml`. Attributes from the core semantic
+  conventions, such as `device.id` or `host.name`, are referenced, not
+  redefined.
+- **`docs/`**: Markdown for people. Explanations and the mapping to source
+  standards (OPC UA, Sparkplug B, Modbus, CIP) are hand-written; attribute
+  tables will be generated from `model/` by Weaver.
+
+Other folders used by the domain registries, such as `templates/` for doc
+generation, `policies/` for extra checks and `reference/` for reference
+implementations, will be added when they're needed.
 
 The first definitions, common attributes (location, asset, device) and data
 quality, are planned as separate pull requests. See
