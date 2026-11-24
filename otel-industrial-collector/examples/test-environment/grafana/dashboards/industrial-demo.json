@@ -1,0 +1,188 @@
+{
+  "uid": "otel-industrial-demo",
+  "title": "OpenTelemetry Industrial Demo",
+  "description": "Simulated Modbus, EtherNet/IP and Sparkplug B devices and an OPC UA server, collected by otelcol-industrial-gateway.",
+  "tags": ["opentelemetry", "industrial"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Modbus device",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (modbus_unit_id) ({__name__=~\"modbus_device_up(_ratio)?\"})", "legendFormat": "unit {{modbus_unit_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "modbus.device.up: 1 when the device answered the last poll, 0 when it is unreachable."
+    },
+    {
+      "id": 2,
+      "title": "EtherNet/IP device",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "{{ethernetip_device_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "ethernetip.device.up: 1 when the device answered the ListIdentity check, 0 when it is unreachable."
+    },
+    {
+      "id": 9,
+      "title": "Sparkplug B device",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (device_id) ({__name__=~\"staleness(_seconds)?\"} < bool 15)", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "Sparkplug B devices push data, so there is no device.up metric. This uses the receiver's staleness metric (seconds since the device last sent data, reported every 30 seconds): UP below 15 seconds, DOWN when the device has gone silent."
+    },
+    {
+      "id": 14,
+      "title": "OPC UA server",
+      "type": "stat",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "loki", "uid": "loki"}, "expr": "sum(count_over_time({service_name=\"opcua-sim\"}[60s])) or vector(0)", "queryType": "instant"}
+      ],
+      "fieldConfig": {"defaults": {"displayName": "opcua-sim", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}}}, {"type": "range", "options": {"from": 1, "to": 1000000000, "result": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+      "description": "The opcua receiver is logs-only and reports no metrics about itself, so this counts the OPC UA log records that reached Loki in the last 60 seconds. UP means logs are arriving from the server; a healthy server with nothing to log would also show DOWN. The demo server logs every 5 seconds."
+    },
+    {
+      "id": 3,
+      "title": "Scrape errors (failed points per second)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (receiver) (rate({__name__=~\"otelcol_scraper_errored_metric_points.*\"}[1m]))", "legendFormat": "{{receiver}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}, "unit": "short", "min": 0}, "overrides": []},
+      "description": "Points the receivers failed to read: wrong addresses or tags, or every point while a device is down. Compare with device up."
+    },
+    {
+      "id": 4,
+      "title": "Device availability over time",
+      "type": "state-timeline",
+      "datasource": {"type": "datasource", "uid": "-- Mixed --"},
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 5},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (modbus_unit_id) ({__name__=~\"modbus_device_up(_ratio)?\"})", "legendFormat": "Modbus unit {{modbus_unit_id}}"},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (ethernetip_device_name) ({__name__=~\"ethernetip_device_up(_ratio)?\"})", "legendFormat": "EtherNet/IP {{ethernetip_device_name}}"},
+        {"refId": "C", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (device_id) ({__name__=~\"staleness(_seconds)?\"} < bool 15)", "legendFormat": "Sparkplug B {{device_id}}"},
+        {"refId": "D", "datasource": {"type": "loki", "uid": "loki"}, "expr": "sum(count_over_time({service_name=\"opcua-sim\"}[60s])) or vector(0)", "legendFormat": "OPC UA opcua-sim"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}, {"type": "range", "options": {"from": 1, "to": 1000000000, "result": {"text": "UP", "color": "green"}}}, {"type": "special", "options": {"match": "null", "result": {"text": "NO DATA", "color": "#808080"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "options": {"showValue": "never", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    },
+    {
+      "id": 5,
+      "title": "Modbus registers",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"modbus_register_value(_ratio)?\"}", "legendFormat": "{{modbus_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}}, "overrides": [{"matcher": {"id": "byRegexp", "options": "pressure.*"}, "properties": [{"id": "custom.axisPlacement", "value": "right"}, {"id": "custom.axisLabel", "value": "pressure"}]}]},
+      "description": "Holding registers from the Modbus simulator. Pressure uses the right-hand axis."
+    },
+    {
+      "id": 6,
+      "title": "Modbus coils",
+      "type": "state-timeline",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"modbus_coil_value(_ratio)?\"}", "legendFormat": "{{modbus_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "#808080"}, "1": {"text": "ON", "color": "blue"}}}], "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"showValue": "auto", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    },
+    {
+      "id": 7,
+      "title": "EtherNet/IP temperature",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 18, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"ethernetip_tag_value.*\", ethernetip_tag_name=\"temperature\"}", "legendFormat": "temperature"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "title": "EtherNet/IP pump status",
+      "type": "state-timeline",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 18, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "{__name__=~\"ethernetip_tag_value.*\", ethernetip_tag_name=\"pumpstatus\"}", "legendFormat": "pumpstatus"}
+      ],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "#808080"}, "1": {"text": "ON", "color": "blue"}}}], "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"showValue": "auto", "mergeValues": true, "rowHeight": 0.8, "legend": {"showLegend": false}}
+    },
+    {
+      "id": 10,
+      "title": "Sparkplug B motor speed",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "motor_speed", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}, "unit": "rotrpm"}, "overrides": []},
+      "description": "motor_speed from the Sparkplug B simulator's conveyor. The simulator sends DDATA every 5 seconds; the receiver reports the latest values every 30 seconds."
+    },
+    {
+      "id": 11,
+      "title": "Sparkplug B motor temperature",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 26, "w": 8, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "motor_temperature", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"custom": {"lineWidth": 2, "fillOpacity": 0, "showPoints": "never"}, "unit": "celsius"}, "overrides": []}
+    },
+    {
+      "id": 12,
+      "title": "Parts produced",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 20, "y": 26, "w": 4, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max by (device_id) (parts_produced)", "legendFormat": "{{device_id}}"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "blue"}, "unit": "short"}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value"},
+      "description": "parts_produced counter from the Sparkplug B simulator. It restarts at zero when the simulator restarts."
+    },
+    {
+      "id": 13,
+      "title": "OPC UA logs",
+      "type": "logs",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"x": 0, "y": 34, "w": 24, "h": 10},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "loki", "uid": "loki"}, "expr": "{service_name=\"opcua-sim\"}"}
+      ],
+      "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true},
+      "description": "Log records from the OPC UA test server's ServerLog object (OPC UA Part 26), received by the opcua receiver over a subscription and stored in Loki. The server sends one every 5 seconds."
+    }
+  ]
+}
